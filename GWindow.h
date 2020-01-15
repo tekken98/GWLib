@@ -14,10 +14,23 @@ const int COLORBLACK = 0x0;
 const int COLORBLUE  = 0x0000ff;
 const int COLORRED  = 0xff0000;
 enum MSG { MSG_VOID=1, MSG_REDRAW,MSG_CONTINUE,MSG_NODRAW};
+#include <iostream>
+using namespace std;
 template <typename T>
-void msg(T t){
-    std::cout << t << std::endl;
+void msg(T& a)
+{
+    cout << a;
+    std::cout.flush();
+};
+
+template <typename T, typename Y , typename... V>
+void  msg( T& a , Y& y ,  V& ... args)
+{
+    cout << a ;
+    msg(y,args...);
+    std::cout.flush();
 }
+
 
 class GPoint
 {
@@ -44,6 +57,8 @@ class GPoint
         void dump(){
             cout << "GPoint dump: ";
             cout << "x:" << x << " y:" << y ;
+            cout << endl;
+            cout.flush();
         }
 };
 class GRect
@@ -78,17 +93,19 @@ class GRect
         void move(const GPoint& p){
             move(p.x,p.y);
         }
-        void add(int x , int y){
+        GRect& add(int x , int y){
             x1 += x;
             y1 += y;
             x2 += x;
             y2 += y;
+            return *this;
         }
-        void add(const GPoint & pt){
+        GRect& add(const GPoint & pt){
             x1 += pt.x;
             y1 += pt.y;
             x2 += pt.x;
             y2 += pt.y;
+            return *this;
         }
         void scale(int s){
             x1 -= s;
@@ -215,11 +232,13 @@ class GWindowBase
         GRect m_reservedrect;
         GWindowBase * mp_parent;
         GC m_gc;
-        GRect m_rect;
+        GRect m_window_rect;
+        GRect m_client_rect;
+        int m_border_width = 4;
         bool m_need_draw = true;
     public:
         //constructor
-        GWindowBase():mp_parent(NULL),m_gc(NULL),m_rect(0,0,0,0){};
+        GWindowBase():mp_parent(NULL),m_gc(NULL),m_window_rect(0,0,0,0){};
         //GWindowBase(const GWindowBase& s);
         //GWindowBase& operator=(const GWindowBase& s);
         //~GWindowBase();
@@ -248,25 +267,49 @@ class GWindowBase
 
         GPoint          getAbsolutePosition(){
             GWindowBase * base = mp_parent;
-            GPoint pt = GPoint(m_rect.x1, m_rect.y1);
+            GPoint pt = GPoint(m_window_rect.x1, m_window_rect.y1);
             GString s;
             if (base == NULL)
                 return pt;
             pt += base->getAbsolutePosition(); 
             return pt;
         }
-        GRect&          getWindowRect(){ return m_rect; }
-        void            move(GPoint& p){ m_rect.move(p.x,p.y);}
-        void            move(int x, int y ){ m_rect.move(x,y);}
-        void            setWindowRect(const GRect& r){
-            m_rect =  r;
+        XEvent xeventToLocal(const XEvent& e){
+            XEvent ev = e;
+            int x = getAbsolutePosition().x;
+            int y = getAbsolutePosition().y;
+            GRect r = getWindowRect();
+            ev.xbutton.x -= x - r.x1;
+            ev.xbutton.y -= y - r.y1;
+            return ev;
+        }
+        int             getBorderWidth(){ return m_border_width;}
+        void            setBorderWidth(int w){ m_border_width = w;}
+        GRect&          getWindowRect(){ return m_window_rect; }
+        GRect&          getClientFrameRect(){ return m_client_rect; }
+        GRect           getClientWindowRect(){
+            GRect r = m_client_rect;
+            r.move(m_client_rect.x1 - m_window_rect.x1,
+                    m_client_rect.y1 - m_window_rect.y1);
+            return  r;
+        }
+
+        void            move(GPoint& p){ m_window_rect.move(p.x,p.y);}
+        void            move(int x, int y ){ m_window_rect.move(x,y);}
+        void            setWindowRect(const GRect& r){ m_window_rect =  r; }
+        void            setClientRect(const GRect& r){ m_client_rect = r;}
+        void            setClientRect(int x1, int y1, int x2, int y2){
+            m_client_rect.x1 = x1;
+            m_client_rect.y1 = y1;
+            m_client_rect.x2 = x2;
+            m_client_rect.y2 = y2;
         }
         void            setWindowRect(int x1,int y1,int x2, int y2)
         {
-            m_rect.x1 = x1 ;
-            m_rect.y1 = y1;
-            m_rect.x2 = x2;
-            m_rect.y2 = y2;
+            m_window_rect.x1 = x1 ;
+            m_window_rect.y1 = y1;
+            m_window_rect.x2 = x2;
+            m_window_rect.y2 = y2;
         }
         void            needDraw(bool b){ m_need_draw = b;}
         bool            needDraw(){return m_need_draw;}
@@ -289,7 +332,7 @@ class GWindowBase
                 cout << "m_parent = NULL" << endl;
             else 
                 cout << "m_pparent = " << mp_parent << endl;
-            m_rect.dump();
+            m_window_rect.dump();
         }
         GRect getFontStringRect(const char* str) {
             int direction,ascent,descent;
@@ -303,10 +346,14 @@ class GWindowBase
             return r;
         }
 
-        virtual void    update(){}; 
-        virtual MSG     processEvent(XEvent& ev){};
+        virtual void    recalcRect(){ 
+            GRect  r = getWindowRect();
+            r.shrink(getBorderWidth());
+            setClientRect(r);
+        }; 
+        virtual MSG     processEvent(XEvent& e){};
         virtual void    draw() {};
-        //virtual void    calcAll(){};
+        virtual void    layout(){};
 };
 template <typename T>
 class GWindow : public GWindowBase
@@ -315,10 +362,9 @@ class GWindow : public GWindowBase
         GString m_title;
         std::vector<GWindowBase*> m_pv_childs;
         GRect m_str_rect;
-        int m_gap;
     public:
         //constructor
-        GWindow():m_pv_childs(),m_title("no"),m_gap(10) {};
+        GWindow():m_pv_childs(),m_title("no") {};
         GWindow(const string& s){
             m_title = s;
         }
@@ -331,10 +377,7 @@ class GWindow : public GWindowBase
             setWindowRect(g_base.getWindowRect());
             add(f);
             f->setWindowRect(g_base.getWindowRect());
-            f->update();
-        }
-        void setGap(int g){
-            m_gap = g;
+            f->recalcRect();
         }
         void setBackground() { 
             XSetBackground(getDisplay(),getGC(),g_base.whitePixel());
@@ -354,7 +397,7 @@ class GWindow : public GWindowBase
         void drawStringCenter(const GRect& r,const char * str){
             GRect fr = getFontStringRect(str);
             int baseh = fr.y1;
-            int x = 2;
+            int x = getBorderWidth();
             int y = r.y2 - ((r.height() - fr.height()) / 2) - baseh;
             drawString(x,y,str);
         }
@@ -373,8 +416,8 @@ class GWindow : public GWindowBase
             XFillRectangle(getDisplay(),getWindow(),getGC(),r.x1, r.y1, r.width(),r.height());
         }
         void fillRectangle(int x1 , int y1, int x2, int y2){
-            GPoint pt = getAbsolutePosition();
-            fillRectangle(GRect(x1,y1,x2,y2).add(pt));
+            GRect r = GRect(x1,y1,x2,y2);
+            fillRectangle(r);
         }
         void add(GWindowBase * w ){
             m_pv_childs.push_back(w);
@@ -393,7 +436,9 @@ class GWindow : public GWindowBase
                     switch(ev.type){
                         case Expose:
                             //case ConfigureNotify:
-                            a->setWindowRect(0,0,ev.xexpose.width,ev.xexpose.height);
+                            GRect r = GRect(0,0,ev.xexpose.width,ev.xexpose.height);
+                            a->setWindowRect(r);
+                            //a->recalcRect();
                             break;
                     }
                     a->processEvent(ev);
@@ -454,8 +499,7 @@ class GWindow : public GWindowBase
         void drawAllWindow(){
             for (auto a : m_pv_childs){
                 a->needDraw(true);
-                if (a->needDraw())
-                    a->draw();
+                a->draw();
             }
         }
         void dump(){
@@ -468,6 +512,9 @@ class GWindow : public GWindowBase
             cout << " ############ " << endl;
         }
 };
+class GScrollWindow : public GWindow<GScrollWindow>
+{
+};
 class GEdit : public GWindow<GEdit>, public GEvent
 {
     private:
@@ -477,8 +524,14 @@ class GEdit : public GWindow<GEdit>, public GEvent
         int m_cursor_position = 1;
     public:
         // ev x y has changed to local window 
-        MSG processEvent(XEvent& ev){ wchar_t buf[128];
-            GRect r = getWindowRect();
+        MSG processEvent(XEvent& e){ wchar_t buf[128];
+            XEvent ev = xeventToLocal(e);
+            if (ev.type == Expose){
+                draw();
+                return MSG_CONTINUE;
+            }
+
+            GRect r = getClientFrameRect();
             m_in = r.ptInRect(ev.xbutton.x, ev.xbutton.y) ;
             if (ev.type == ButtonPress ){
                 if (m_in){
@@ -498,7 +551,6 @@ class GEdit : public GWindow<GEdit>, public GEvent
                         m_focus = false;
                         needDraw(true);
                         draw();
-                        msg("return coninue");
                         return MSG_CONTINUE;
                     }
                 }
@@ -514,6 +566,7 @@ class GEdit : public GWindow<GEdit>, public GEvent
                 needDraw(true);
             }
             if (needDraw()){
+                // no other window draw only self draw in this process
                 draw();
                 return MSG_NODRAW;
             }
@@ -529,8 +582,7 @@ class GEdit : public GWindow<GEdit>, public GEvent
         }
 #define XC_xterm 152
         void drawCursor(){
-            GRect r = getWindowRect();
-            r.move(0,0);
+            GRect r = getClientWindowRect();
             GRect f = getFontStringRect(getTitle());
             int gap = f.width() / strlen(getTitle());
             int pos = 0;
@@ -545,8 +597,7 @@ class GEdit : public GWindow<GEdit>, public GEvent
             fillRectangle(r, COLORBLACK);
         }
         void drawFocus(){
-            GRect r = getWindowRect();
-            r.move(0,0);
+            GRect r = getClientWindowRect();
             int height;
             height = r.height();
             int width = r.width();
@@ -560,7 +611,8 @@ class GEdit : public GWindow<GEdit>, public GEvent
                 int gap = getFontStringRect(getTitle()).width() / strlen(getTitle());
                 if ((m_cursor_position * gap) > r.width()){
                     b = r.width() / gap;
-                    s = s.substr(m_cursor_position - b,l);
+                    if (m_cursor_position -b < l)
+                        s = s.substr(m_cursor_position - b,l);
                 }else
                     s = s.substr(0,l);
             }
@@ -573,7 +625,6 @@ class GEdit : public GWindow<GEdit>, public GEvent
 
         //maniulator
         void draw() {
-            msg(getTitle() + "drawing");
             if (!needDraw())
                 return;
             drawFocus();
@@ -592,12 +643,12 @@ class GLabel : public GWindow<GLabel>, public GEvent
         void setTitle(const string& s){
             GWindow::setTitle(s);
             setWindowRect(getStrRect());
-            getWindowRect().scale(2);
+            getClientFrameRect().scale(2);
         }
         void drawUpdate(){
-            GRect r = getWindowRect();
-            r.move(0,0);
+            GRect r = getClientWindowRect();
             drawSolid(r,COLORMID);
+            drawFrame(r,COLORRED,COLORRED);
             setForeground(COLORWHITE);
             drawStringCenter(r,getTitle());
         }
@@ -768,7 +819,8 @@ class GMenu : public GWindow<GMenu>
             return MSG_VOID;
         }
 
-        MSG processEvent(XEvent& ev){
+        MSG processEvent(XEvent& e){
+            XEvent ev = xeventToLocal(e);
             int ex = ev.xbutton.x;
             int ey = ev.xbutton.y;
             GRect r ;
@@ -904,6 +956,7 @@ class GList  :public  GWindow<GList>
             m_string_list.push_back(s);
         }
         void drawDownArrow(GRect& r){
+            clearArrow(r);
             setForeground(COLORBLACK);
             int x = r.x2 - 10 - 5;
             int y = (r.height() - 5) / 2 ;
@@ -913,26 +966,42 @@ class GList  :public  GWindow<GList>
                 x++,y++,ex--;
             }
         }
+        void drawLeftArrow(GRect& r){
+            setForeground(COLORBLACK);
+            int x = r.x2 - 5;
+            int y = (r.height() - 5) / 2 ;
+            int ey = y + 10;
+            for (int i = 0;i<6;i++){
+                drawLine(x,y, x, ey);
+                x--,y++,ey--;
+            }
+
+        }
+        void clearArrow(GRect& r){
+            setForeground(COLORWHITE);
+            fillRectangle(r.x2 -10, r.y1 + 5, r.x2 - 4, r.y2 - 5);
+        }
         void draw(){
             if (!needDraw())
                 return ;
-            GRect r = getWindowRect();
-            r.move(0,0);
+            GRect r = getClientWindowRect();
+            //msg("GList drawing \n");
             drawSolid(r,COLORWHITE);
             drawFrame(r);
-            drawDownArrow(r);
+            drawLeftArrow(r);
             drawStringCenter(r,getTitle());
             needDraw(false);
         }
-        MSG processEvent(XEvent& ev){
+        MSG processEvent(XEvent& e){
+            XEvent ev = xeventToLocal(e);
             if ((m_btn_down) &&  isPointerMove(ev)){
                 int size = m_string_list.size();
                 int space = m_showStringRect.height() / size;
                 int by = getWindowRect().y2;
+                int y = yOfEv(ev) - by;
                 int bx = m_showStringRect.x1;
                 int ex = m_showStringRect.x2;
-                int y = yOfEv(ev) - by;
-                by -= getWindowRect().y1;
+                by = getClientWindowRect().height();
                 if (y > 0) {
                     row = y  / space;
                     if  (row >= 0 && row  < size && row != oldrow){
@@ -952,6 +1021,7 @@ class GList  :public  GWindow<GList>
                 setTitle(m_string_list[m_select]);
                 setReservedRect();
                 needDraw(true);
+                // this need draw and other window need draw too.
                 return MSG_REDRAW;
             }
             if (ev.type == Expose){
@@ -972,33 +1042,40 @@ class GList  :public  GWindow<GList>
                     return MSG_NODRAW;
                 }
             }
+            // if button down no other window should redraw
+            if (m_btn_down == true)
+                return MSG_NODRAW;
             return MSG_CONTINUE;
         }
         void showString(){
-            GRect r = getWindowRect();
-            showStringRect(m_string_list,GPoint(0,r.height()), COLORWHITE);
+            GRect r = getClientWindowRect();
+            drawDownArrow(r);
+            showStringRect(m_string_list,GPoint(r.x1,r.height()), COLORWHITE);
         }
         void showStringRect(std::vector<GString>&v , const GPoint& p , int solidColor){
             GRect r;
             GRect sr;
             int w = 0,h = 0;
+            int rowh = 0;
             for(auto a : v){
-                sr = getFontStringRect(a);
-                w = sr.width() > w ? sr.width() : w;
-                h += sr.height();
+                    sr = getFontStringRect(a);
+                    w = sr.width() > w ? sr.width() : w;
+                    h += sr.height();
             }
-            r.x2 = getWindowRect().width();
-            r.y2 = getWindowRect().height() * v.size();
+            rowh = sr.height();
+            r.x2 = getClientWindowRect().width();
+            r.y2 =rowh * v.size();
             r.move(p);
             m_showStringRect = r;
             setReservedRect(r);
             drawSolid(r,solidColor);
             drawFrame(r);
             setForeground(0x0);
-            h = getWindowRect().height();
+            h = getClientWindowRect().height();
             for (auto a : v){
                 sr = getFontStringRect(a);
-                h += getWindowRect().height();
+                h +=rowh;
+
                 drawString(p.x + 2, h - sr.y1, a);
             }
         }
@@ -1009,6 +1086,53 @@ class GList  :public  GWindow<GList>
             drawStringCenter(rr,showStr);
         }
         //accessor
+};
+class GListBox : public GWindow<GListBox>
+{
+    GRect m_top;
+    GRect m_client;
+    GRect m_vertbar;
+    GRect m_horibar;
+    int m_top_height = 20;
+    int m_item_count = 1;
+    int m_item_length = 1;
+    public:
+        GListBox(){};
+        void draw(){
+            drawFrame(m_top,COLORMID,COLORMID);
+            drawFrame(m_client);
+        }
+        void recalcRect(){
+            GRect r = getClientFrameRect();
+            m_top.x1 = 0;
+            m_top.y1 = 0;
+            m_top.x2 = r.x2;
+            m_top.y2 = m_top_height;
+            m_client.x1 = 0;
+            m_client.y1 = m_top_height;
+            m_client.x2 = r.x2;
+            m_client.y2 = r.y2;
+            m_vertbar.x1 = r.x2 - m_top_height;
+            m_vertbar.y1 = r.y1 - m_top_height;
+            m_vertbar.x2 = r.x2;
+            int height = r.height() / m_item_count;
+            m_vertbar.y2 = m_vertbar.y1 + height;
+            m_horibar.x1 = r.x1;
+            m_horibar.y1 = r.y2 - m_top_height;
+            int width = r.width() / m_item_length;
+            m_horibar.x2 = r.x1 + width;
+            m_horibar.y2 = r.y2;
+        }
+        MSG processEvent(XEvent& e){
+            XEvent ev = xeventToLocal(e);
+            switch(ev.type){
+                case Expose:
+                    recalcRect();
+                    draw();
+                    break;
+            }
+            return MSG_CONTINUE;
+        }
 };
 class GStatus : public GWindow<GStatus>
 {
@@ -1055,7 +1179,6 @@ class GFrame : public GWindow<GFrame>, public GEvent
         GStatus m_StatusBar;
         GMenu* m_menu = NULL;
         bool m_init = false;
-        int m_gap = 10;
         GWindowBase* m_targetWin = NULL;
     public:
         virtual void draw() {
@@ -1065,13 +1188,15 @@ class GFrame : public GWindow<GFrame>, public GEvent
             }
             drawAllWindow();
         }
+        void recalcRect(){
+            m_StatusBar.setParent(this->getParent());
+            GRect r = getWindowRect();
+            r.shrink(getBorderWidth());
+            setClientRect(r);
+            updateStatus();
+        }
         void innerdraw(){
             draw();
-        }
-        void redraw(){
-            for (auto a : getChilds())
-                if (a->needDraw())
-                    a->draw();
         }
     public:
         GFrame():m_StatusBar("Status"){
@@ -1096,33 +1221,10 @@ class GFrame : public GWindow<GFrame>, public GEvent
             }
         }
         void updateStatus(){
-            GRect rootrect = getWindowRect();
+            GRect rootrect = getClientFrameRect();
+            //GRect rootrect = getClientWindowRect();
             int height = m_StatusBar.getFontStringRect(getTitle()).height();
-            m_StatusBar.setWindowRect(rootrect.x1, rootrect.y2 - height -2, rootrect.x2, rootrect.y2 + 2);
-        }
-        void update() {
-            updateStatus();
-            int x = 0;
-            int y = 0;
-            GRect r = getWindowRect();
-            int h = 0;
-            if (m_menu != NULL){
-                h = getFontStringRect(getTitle()).height();
-                y = h;
-                m_menu->setWindowRect(r.x1,r.y1, r.x2, r.y1+h);
-            }
-            for (auto a : getChilds()){
-                /*
-                   GRect& r = a->getWindowRect();
-                   r.move(x,y + 2);
-                   int cx = a->getWindowRect().width();
-                   x += cx + m_gap; 
-                   y = a->getWindowRect().height();
-                   */
-            }
-            if (!m_init){
-                m_init = true;
-            }
+            m_StatusBar.setWindowRect(rootrect.x1, rootrect.y2 - height -4, rootrect.x2, rootrect.y2 );
         }
         bool isReserved(){
             GRect r = getWindowRect();
@@ -1134,22 +1236,16 @@ class GFrame : public GWindow<GFrame>, public GEvent
             return false;
         }
         void drawFrame(){
-            GRect r = getWindowRect();
+            GRect r = getClientWindowRect();
             if (isReserved())
                 return;
             drawSolid(r,COLORMID);
             GWindow::drawFrame(r);
-            m_StatusBar.draw();
+            //m_StatusBar.draw();
         }
-        void drawStatus(){
-            GRect r = m_StatusBar.getWindowRect();
-            //msg(getTitle());
-            if (isReserved())
-                return;
-            m_StatusBar.draw();
+        MSG processEvent(XEvent& ev){
         }
         MSG innerprocessEvent(XEvent& ev){
-            drawStatus();
             /*
                if (m_menu != NULL){
                if (m_menu->processEvent(ev) == MSG_REDRAW){
@@ -1162,13 +1258,10 @@ class GFrame : public GWindow<GFrame>, public GEvent
             GString s;
             int x = getAbsolutePosition().x;
             int y = getAbsolutePosition().y;
-            int xx = e.xbutton.x - x;
-            int yy = e.xbutton.y - y ;
-            s.format("%d,%d,%s",xx , yy,(const char*)getTitle());
-            m_StatusBar.setTitle(s);
-            e.xbutton.x = xx;
-            e.xbutton.y = yy;
-
+            // to frame local xy;
+            int xx = ev.xbutton.x - x;
+            int yy = ev.xbutton.y - y;
+ 
             if (m_targetWin !=NULL){
                 switch (m_targetWin -> processEvent(e)){
                     case MSG_NODRAW:
@@ -1180,7 +1273,11 @@ class GFrame : public GWindow<GFrame>, public GEvent
                         break;
                 }
             }
-            for (auto a : getChilds()){
+            s.format("%d,%d,%d,%d %s",xx , yy, x,y, (const char*)getTitle());
+            m_StatusBar.setTitle(s);
+            m_StatusBar.draw();
+
+           for (auto a : getChilds()){
                 switch(a->processEvent(e)){
                     case MSG_REDRAW:
                         draw();
@@ -1201,8 +1298,9 @@ class GFrame : public GWindow<GFrame>, public GEvent
 
 class GLayout 
 {
-    private:
+    protected:
         GFrame * m_frame;
+        int m_sep = 2;
     public:
         GLayout(GFrame * f){ m_frame = f;};
         GLayout(){};
@@ -1218,20 +1316,20 @@ class GLayoutHori : public GLayout
         void layout(){
             GFrame * f = getFrame();
             int ct =f->getChilds().size();
+            GRect r = f->getClientFrameRect();
+            f->updateStatus();
             if  ( ct == 0)
                 return;
-            GRect r = f->getWindowRect();
-            f->updateStatus();
             GStatus * status  = f->getStatusBar();
             int h = (r.height() - status->getWindowRect().height());
-            int w = r.width() / ct;
+            int w = (r.width() - ct * m_sep) / ct;
             int x = 0;
             int y = 0;
             for (auto a : f->getChilds()){
                 a->setWindowRect(x,y,w + x,h); 
-                //a->update();
-                x += w;
-                //a->dump();
+                a->recalcRect();
+                a->layout();
+                x += w + m_sep;
             }
         }
 
@@ -1243,19 +1341,20 @@ class GLayoutVertical : public GLayout
         void layout(){
             GFrame * f = getFrame();
             int w =f->getChilds().size();
+            GRect r = f->getClientFrameRect();
+            r.move(0,0);
+            f->updateStatus();
             if  ( w == 0)
                 return;
-            GRect r = f->getWindowRect();
-            f->updateStatus();
             GStatus * status  = f->getStatusBar();
-            int h = (r.height() - status->getWindowRect().height()) / w;
+            int h = (r.height() - status->getWindowRect().height() - w * m_sep) / w;
             int x = 0;
             int y = 0;
             for (auto a : f->getChilds()){
                 a->setWindowRect(x,y,r.width(),y + h); 
-                a->update();
-                y += h;
-                //a->dump();
+                a->recalcRect();
+                a->layout();
+                y += h + m_sep;
             }
         }
 };
@@ -1264,6 +1363,10 @@ class GFrameLayout : public GFrame
 {
     private :
         GLayout * m_layout;
+        void layout(){
+            GFrame::recalcRect();
+            m_layout->layout();
+        }
     public:
         GFrameLayout(const GString& s) : GFrame(s){};
         GFrameLayout(){
@@ -1277,16 +1380,16 @@ class GFrameLayout : public GFrame
             m_layout = l;
             l->setFrame(this);
         }
-        MSG processEvent(XEvent& ev){
-            if (ev.type == Expose && ev.xexpose.count == 0){
-                m_layout->layout();
-                innerdraw();
+        MSG processEvent(XEvent& e){
+            if (e.type == Expose ){
+                //drawFrame();
+                layout();
                 for (auto a : getChilds()){
-                    a->processEvent(ev);
+                    a->processEvent(e);
                 }
-                return MSG_NODRAW;
+                innerdraw();
             }
-            return innerprocessEvent(ev);
+            return innerprocessEvent(e);
         }
 };
 #endif
