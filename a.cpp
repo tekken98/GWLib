@@ -38,15 +38,27 @@ class MW : public GWindow<MW>
         GEdit label("good");
         l.addList("good");
         l.addList("bad");
+        GListBox lb;
         GString str[] {"one","two","three",
             "four","five"};
         for (int i = 0;i < 5;i++)
             l.addList(str[i]);
         GLabel lll("good");
         GLabel btn("button");
-        GListBox lb;
 
-        mid.add(&label);
+        lb.addList("good");
+        lb.addList("bad1");
+        lb.addList("bad2");
+        lb.addList("bad3");
+        lb.addList("bad4");
+        lb.addList("bad5");
+        lb.addList("bad6");
+        lb.addList("bad7");
+        lb.addList("bad8");
+        lb.addList("bad9");
+        lb.addList("no");
+
+        mid.add(&lb);
         mid.add(&l);
         mid.add(&label);
         //mid.add(&lll);

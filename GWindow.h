@@ -234,7 +234,7 @@ class GWindowBase
         GC m_gc;
         GRect m_window_rect;
         GRect m_client_rect;
-        int m_border_width = 4;
+        int m_border_width = 2;
         bool m_need_draw = true;
     public:
         //constructor
@@ -286,7 +286,7 @@ class GWindowBase
         int             getBorderWidth(){ return m_border_width;}
         void            setBorderWidth(int w){ m_border_width = w;}
         GRect&          getWindowRect(){ return m_window_rect; }
-        GRect&          getClientFrameRect(){ return m_client_rect; }
+        GRect&          getClientRect(){ return m_client_rect; }
         GRect           getClientWindowRect(){
             GRect r = m_client_rect;
             r.move(m_client_rect.x1 - m_window_rect.x1,
@@ -445,7 +445,43 @@ class GWindow : public GWindowBase
                 }
             }
         }
-
+ 
+        void showHighlightBar(const GRect& r,int highlighcolor, const GString& showStr){
+            GRect rr = r;
+            drawSolid(rr,highlighcolor);
+            setForeground(COLORWHITE);
+            drawStringCenter(rr,showStr);
+        }
+ 
+        GRect  showStringRect(std::vector<GString>&v , const GPoint& p , int solidColor,int from , int to){
+            GRect r;
+            GRect sr;
+            int w = 0,h = 0;
+            int rowh = 0;
+            int l = to > v.size() ? v.size():to;
+            for(int i = from; i < l; i++){
+                    sr = getFontStringRect(v[i]);
+                    w = sr.width() > w ? sr.width() : w;
+                    h += sr.height();
+            }
+            rowh = sr.height();
+            r.x2 = getClientWindowRect().width();
+            r.y2 =rowh * (l - from);
+            r.move(p);
+            //m_showStringRect = r;
+            setReservedRect(r);
+            drawSolid(r,solidColor);
+            drawFrame(r);
+            setForeground(0x0);
+            h = p.y;
+            for (int i = from; i<l; i++){
+                sr = getFontStringRect(v[i]);
+                h +=rowh;
+                drawString(p.x + 2, h - sr.y1, v[i]);
+            }
+            return r;
+        }
+ 
         //accessor
         bool isForMe(XEvent& ev){
             return getWindowRect().ptInRect(ev.xbutton.x,ev.xbutton.y);
@@ -512,8 +548,59 @@ class GWindow : public GWindowBase
             cout << " ############ " << endl;
         }
 };
-class GScrollWindow : public GWindow<GScrollWindow>
-{
+class GScrollBar : public GWindow<GScrollBar> {
+    bool m_buttonPressing = false;
+    int  m_moveheight = 50;
+    public:
+        void draw(){
+            if (!needDraw())
+                return;
+            GRect r = getWindowRect();
+            r.move(0,0);
+            drawSolid(r,COLORRED); 
+        };
+        bool isButtonPressing() {
+            return m_buttonPressing;
+        }
+        void setMoveHeight(int h){
+            m_moveheight = h;
+        }
+        MSG processEvent(XEvent& e){
+            XEvent ev = xeventToLocal(e);
+            if (isForMe(ev) ){
+                switch (ev.type){
+                    case ButtonPress:
+                        m_buttonPressing = true;
+                        break;
+                    case ButtonRelease:
+                        m_buttonPressing = false;
+                        break;
+                    case MotionNotify:
+                        if (isButtonPressing()){
+                            GRect r = getWindowRect();
+                            GRect rp = getParent()->getClientRect();
+                            int x = ev.xbutton.x;
+                            int y = ev.xbutton.y;
+                            int half = r.height() / 2;
+                            if ( (y )  >= (rp.y1 + half)  
+                                    && (y ) <= (rp.y1 - half + m_moveheight)){
+                            r.move(r.x1, y - half);
+                            setWindowRect(r);
+                            needDraw(false);
+                            getParent()->needDraw(true);
+                            getParent()->draw();
+                            needDraw(true);
+                            draw();
+                            return MSG_NODRAW;
+                            }
+                        }
+                        break;
+                }
+                msg("GScroll");
+                return MSG_NODRAW;
+            }
+            return MSG_CONTINUE;
+        }
 };
 class GEdit : public GWindow<GEdit>, public GEvent
 {
@@ -531,7 +618,7 @@ class GEdit : public GWindow<GEdit>, public GEvent
                 return MSG_CONTINUE;
             }
 
-            GRect r = getClientFrameRect();
+            GRect r = getClientRect();
             m_in = r.ptInRect(ev.xbutton.x, ev.xbutton.y) ;
             if (ev.type == ButtonPress ){
                 if (m_in){
@@ -643,7 +730,7 @@ class GLabel : public GWindow<GLabel>, public GEvent
         void setTitle(const string& s){
             GWindow::setTitle(s);
             setWindowRect(getStrRect());
-            getClientFrameRect().scale(2);
+            getClientRect().scale(2);
         }
         void drawUpdate(){
             GRect r = getClientWindowRect();
@@ -657,6 +744,13 @@ class GLabel : public GWindow<GLabel>, public GEvent
         void draw() {
             drawUpdate();
             needDraw(false);
+        }
+        MSG processEvent(XEvent& ev){
+            if (ev.type == Expose){
+                draw();
+                return MSG_NODRAW;
+            }
+            return MSG_CONTINUE;
         }
         //accessor
 };
@@ -1050,68 +1144,75 @@ class GList  :public  GWindow<GList>
         void showString(){
             GRect r = getClientWindowRect();
             drawDownArrow(r);
-            showStringRect(m_string_list,GPoint(r.x1,r.height()), COLORWHITE);
+            m_showStringRect = showStringRect(m_string_list,GPoint(r.x1,r.height()), COLORWHITE,0,5);
         }
-        void showStringRect(std::vector<GString>&v , const GPoint& p , int solidColor){
-            GRect r;
-            GRect sr;
-            int w = 0,h = 0;
-            int rowh = 0;
-            for(auto a : v){
-                    sr = getFontStringRect(a);
-                    w = sr.width() > w ? sr.width() : w;
-                    h += sr.height();
-            }
-            rowh = sr.height();
-            r.x2 = getClientWindowRect().width();
-            r.y2 =rowh * v.size();
-            r.move(p);
-            m_showStringRect = r;
-            setReservedRect(r);
-            drawSolid(r,solidColor);
-            drawFrame(r);
-            setForeground(0x0);
-            h = getClientWindowRect().height();
-            for (auto a : v){
-                sr = getFontStringRect(a);
-                h +=rowh;
-
-                drawString(p.x + 2, h - sr.y1, a);
-            }
-        }
-        void showHighlightBar(const GRect& r,int highlighcolor, const GString& showStr){
-            GRect rr = r;
-            drawSolid(rr,highlighcolor);
-            setForeground(0x0);
-            drawStringCenter(rr,showStr);
-        }
-        //accessor
+       //accessor
 };
 class GListBox : public GWindow<GListBox>
 {
     GRect m_top;
-    GRect m_client;
     GRect m_vertbar;
     GRect m_horibar;
     int m_top_height = 20;
     int m_item_count = 1;
     int m_item_length = 1;
+    std::vector<GString> m_strings;
+    GRect m_showStringRect;
+    int m_maxline = 5;
+    int m_string_height=0;
+    int m_select = -1;
+    int m_firstrow = 0;
+    GScrollBar m_scrollBarVert;
     public:
-        GListBox(){};
+        GListBox(){
+            m_scrollBarVert.setParent(this);
+            m_string_height = getFontStringRect("aA").height();
+        };
         void draw(){
+            if (!needDraw())
+                return;
             drawFrame(m_top,COLORMID,COLORMID);
-            drawFrame(m_client);
+            GRect r = getClientWindowRect();
+            GPoint p(r.x1,r.y1);
+            firstRow();
+            m_showStringRect = showStringRect(m_strings,p,COLORWHITE,m_firstrow,m_firstrow+5);
+            hightLightRow(m_select - m_firstrow);
+            m_scrollBarVert.draw();
+            needDraw(false);
+        }
+        void firstRow(){
+            GRect r = m_scrollBarVert.getWindowRect();
+            GRect c = getClientRect();
+            m_firstrow = ((r.y1 - c.y1)  * m_strings.size() + c.height() - 3 ) / c.height();
+            int w = r.y1 - c.y1;
+            msg(m_firstrow, "\n");
+        }
+        void addList(const GString& s){
+            m_strings.push_back(s);
         }
         void recalcRect(){
-            GRect r = getClientFrameRect();
+            GRect r = getWindowRect();
             m_top.x1 = 0;
             m_top.y1 = 0;
             m_top.x2 = r.x2;
             m_top.y2 = m_top_height;
-            m_client.x1 = 0;
-            m_client.y1 = m_top_height;
-            m_client.x2 = r.x2;
-            m_client.y2 = r.y2;
+            int border = getBorderWidth();
+            GRect rr (r.x1 + border, r.y1 + m_top_height + border,
+                    r.x2 - border,r.y2 -border);
+            setClientRect(rr);
+            int size = m_strings.size();
+            int scroll_height;
+            if (size > m_maxline){
+               scroll_height = (m_maxline * m_string_height  * m_maxline + size -1 ) / size; 
+            }else
+                scroll_height = m_string_height * m_maxline;
+            rr.x1 = rr.x2 - 14;
+            rr. y1 = rr.y1;
+            rr. y2 = rr.y1 + scroll_height;;
+            rr.x2 = rr.x2;
+            m_scrollBarVert.setWindowRect(rr);
+            m_scrollBarVert.setMoveHeight(m_string_height * m_maxline);
+            
             m_vertbar.x1 = r.x2 - m_top_height;
             m_vertbar.y1 = r.y1 - m_top_height;
             m_vertbar.x2 = r.x2;
@@ -1123,7 +1224,21 @@ class GListBox : public GWindow<GListBox>
             m_horibar.x2 = r.x1 + width;
             m_horibar.y2 = r.y2;
         }
+        MSG forChilds(XEvent& ev){
+            XEvent& e = ev;
+            for (auto a : getChilds()){
+                if (a->processEvent(e) == MSG_NODRAW)
+                    return MSG_NODRAW;
+            }
+            return MSG_CONTINUE;
+        }
         MSG processEvent(XEvent& e){
+            if (forChilds(e) == MSG_NODRAW)
+                return MSG_NODRAW;
+            if (m_scrollBarVert.processEvent(e) == MSG_NODRAW){
+                //draw();
+                return MSG_NODRAW;
+            }
             XEvent ev = xeventToLocal(e);
             switch(ev.type){
                 case Expose:
@@ -1131,8 +1246,42 @@ class GListBox : public GWindow<GListBox>
                     draw();
                     break;
             }
+            if (isForMe(ev) && isButtonDown(ev)){
+                int size = m_maxline;
+                int space = m_showStringRect.height() / size;
+                int y = yOfEv(ev) - getClientRect().y1;
+                int row = -1;
+                if (y > 0) {
+                    row = y  / space;
+                    if  (row >= 0 && row  < size ){
+                        showString();
+                        m_scrollBarVert.draw();
+                        m_select = row  + m_firstrow;
+                        hightLightRow(row);
+                        m_scrollBarVert.draw();
+                    }
+                }
+                return MSG_NODRAW;
+            }
             return MSG_CONTINUE;
         }
+        void hightLightRow(int row){
+                int size = m_maxline;
+                int space = m_showStringRect.height() / size;
+            if (row >= 0 && row < size){
+                int y  = getClientRect().y1;
+                int bx = m_showStringRect.x1;
+                int ex = m_showStringRect.x2;
+                GRect r (bx, row * space + y,
+                         ex, row * space + space + y);
+                showHighlightBar(r, COLORBLUE,m_strings[row + m_firstrow]);
+            }
+        }
+        void showString(){
+            GRect r = getClientWindowRect();
+            m_showStringRect = showStringRect(m_strings,GPoint(r.x1,r.y1), COLORWHITE,m_firstrow,m_firstrow + 5);
+        }
+ 
 };
 class GStatus : public GWindow<GStatus>
 {
@@ -1221,7 +1370,7 @@ class GFrame : public GWindow<GFrame>, public GEvent
             }
         }
         void updateStatus(){
-            GRect rootrect = getClientFrameRect();
+            GRect rootrect = getClientRect();
             //GRect rootrect = getClientWindowRect();
             int height = m_StatusBar.getFontStringRect(getTitle()).height();
             m_StatusBar.setWindowRect(rootrect.x1, rootrect.y2 - height -4, rootrect.x2, rootrect.y2 );
@@ -1316,7 +1465,7 @@ class GLayoutHori : public GLayout
         void layout(){
             GFrame * f = getFrame();
             int ct =f->getChilds().size();
-            GRect r = f->getClientFrameRect();
+            GRect r = f->getClientRect();
             f->updateStatus();
             if  ( ct == 0)
                 return;
@@ -1341,7 +1490,7 @@ class GLayoutVertical : public GLayout
         void layout(){
             GFrame * f = getFrame();
             int w =f->getChilds().size();
-            GRect r = f->getClientFrameRect();
+            GRect r = f->getClientRect();
             r.move(0,0);
             f->updateStatus();
             if  ( w == 0)
