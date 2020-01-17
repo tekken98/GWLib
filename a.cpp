@@ -39,10 +39,12 @@ class MW : public GWindow<MW>
         l.addList("good");
         l.addList("bad");
         GListBox lb;
-        GString str[] {"one","two","three",
-            "four","five"};
-        for (int i = 0;i < 5;i++)
+        GListBox bb;
+        GString str[] {"one","two","three","four","five","six","seven"};
+        for (int i = 0;i < 7;i++){
             l.addList(str[i]);
+            bb.addList(str[i]);
+        }
         GLabel lll("good");
         GLabel btn("button");
 
@@ -58,14 +60,17 @@ class MW : public GWindow<MW>
         lb.addList("bad9");
         lb.addList("no");
 
-        mid.add(&lb);
+
+       // mid.add(&lb);
         mid.add(&l);
+        mid.add(&bb);
         mid.add(&label);
         //mid.add(&lll);
        // mid.add(&lb);
        // mid.add(&btn);
        low.add(&left);
        low.add(&right);
+       right.add(&lb);
 
 
         manager.addLayout(new GLayoutVertical());

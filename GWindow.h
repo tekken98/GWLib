@@ -551,6 +551,7 @@ class GWindow : public GWindowBase
 class GScrollBar : public GWindow<GScrollBar> {
     bool m_buttonPressing = false;
     int  m_moveheight = 50;
+    GPoint m_pos;
     public:
         void draw(){
             if (!needDraw())
@@ -570,33 +571,37 @@ class GScrollBar : public GWindow<GScrollBar> {
             if (isForMe(ev) ){
                 switch (ev.type){
                     case ButtonPress:
-                        m_buttonPressing = true;
-                        break;
-                    case ButtonRelease:
-                        m_buttonPressing = false;
-                        break;
+                        if (m_buttonPressing == false){
+                            m_buttonPressing = true;
+                            m_pos.x = e.xbutton.x;
+                            m_pos.y = e.xbutton.y;
+                        }
+                }
+            }
+            if (isButtonPressing()){
+                        GRect r = getWindowRect();
+                        GRect rp = getParent()->getClientRect();
+                        int y = e.xbutton.y;
+                        int by = r.y1;
+                switch (ev.type){
                     case MotionNotify:
-                        if (isButtonPressing()){
-                            GRect r = getWindowRect();
-                            GRect rp = getParent()->getClientRect();
-                            int x = ev.xbutton.x;
-                            int y = ev.xbutton.y;
-                            int half = r.height() / 2;
-                            if ( (y )  >= (rp.y1 + half)  
-                                    && (y ) <= (rp.y1 - half + m_moveheight)){
-                            r.move(r.x1, y - half);
+                        y = y - m_pos.y;
+                        m_pos.y = e.xbutton.y;
+                        by += y;
+                        if ( by >= rp.y1 && by < rp.y1 + m_moveheight - r.height()){
+                            r.move(r.x1, by);
                             setWindowRect(r);
                             needDraw(false);
                             getParent()->needDraw(true);
                             getParent()->draw();
                             needDraw(true);
                             draw();
-                            return MSG_NODRAW;
-                            }
                         }
                         break;
+                    case ButtonRelease:
+                        m_buttonPressing = false;
+                        break;
                 }
-                msg("GScroll");
                 return MSG_NODRAW;
             }
             return MSG_CONTINUE;
@@ -1171,7 +1176,7 @@ class GListBox : public GWindow<GListBox>
         void draw(){
             if (!needDraw())
                 return;
-            drawFrame(m_top,COLORMID,COLORMID);
+            //drawFrame(m_top,COLORMID,COLORMID);
             GRect r = getClientWindowRect();
             GPoint p(r.x1,r.y1);
             firstRow();
@@ -1184,8 +1189,6 @@ class GListBox : public GWindow<GListBox>
             GRect r = m_scrollBarVert.getWindowRect();
             GRect c = getClientRect();
             m_firstrow = ((r.y1 - c.y1)  * m_strings.size() + c.height() - 3 ) / c.height();
-            int w = r.y1 - c.y1;
-            msg(m_firstrow, "\n");
         }
         void addList(const GString& s){
             m_strings.push_back(s);
@@ -1206,10 +1209,14 @@ class GListBox : public GWindow<GListBox>
                scroll_height = (m_maxline * m_string_height  * m_maxline + size -1 ) / size; 
             }else
                 scroll_height = m_string_height * m_maxline;
-            rr.x1 = rr.x2 - 14;
-            rr. y1 = rr.y1;
-            rr. y2 = rr.y1 + scroll_height;;
-            rr.x2 = rr.x2;
+
+            //rr.x1 = rr.x2 - 14 - border;
+            rr.x1 = r.width() - 14 - border; ;
+            rr.y1 = rr.y1 + border;
+            //rr.x2 = rr.x2 - border;
+            rr.x2 = r.width() - border;
+            rr.y2 = rr.y1 + scroll_height;;
+
             m_scrollBarVert.setWindowRect(rr);
             m_scrollBarVert.setMoveHeight(m_string_height * m_maxline);
             
@@ -1531,12 +1538,7 @@ class GFrameLayout : public GFrame
         }
         MSG processEvent(XEvent& e){
             if (e.type == Expose ){
-                //drawFrame();
                 layout();
-                for (auto a : getChilds()){
-                    a->processEvent(e);
-                }
-                innerdraw();
             }
             return innerprocessEvent(e);
         }
