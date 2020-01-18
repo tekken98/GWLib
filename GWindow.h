@@ -44,6 +44,7 @@ class GPoint
         GPoint& operator=(const GPoint& s){
             x = s.x;
             y = s.y;
+            return *this;
         }
         //~GPoint();
     public:
@@ -78,6 +79,7 @@ class GRect
             y1 = s.y1;
             x2 = s.x2;
             y2 = s.y2;
+            return *this;
         };
         ~GRect(){};
     public:
@@ -213,7 +215,7 @@ class GEvent
         //constructor
         GEvent():m_fun(NULL){};
         GEvent(const GEvent& s){};
-        GEvent& operator=(const GEvent& s){};
+        //GEvent& operator=(const GEvent& s){};
         ~GEvent(){};
     public:
         //maniulator
@@ -351,7 +353,7 @@ class GWindowBase
             r.shrink(getBorderWidth());
             setClientRect(r);
         }; 
-        virtual MSG     processEvent(XEvent& e){};
+        virtual MSG     processEvent(XEvent& e){return MSG_CONTINUE;};
         virtual void    draw() {};
         virtual void    layout(){};
 };
@@ -777,6 +779,7 @@ class GMenuItem
         GMenuItem& operator=(const GMenuItem& s){
             m_name = s.m_name;
             m_item = s.m_item;
+            return *this;
         };
         ~GMenuItem(){};
     public:
@@ -815,7 +818,7 @@ class GMenu : public GWindow<GMenu>
         //constructor
         GMenu(){};
         GMenu(const GMenu& s){};
-        GMenu& operator=(const GMenu& s){};
+        GMenu& operator=(const GMenu& s){return *this;};
         ~GMenu(){};
     public:
         //maniulator
@@ -1400,6 +1403,7 @@ class GFrame : public GWindow<GFrame>, public GEvent
             //m_StatusBar.draw();
         }
         MSG processEvent(XEvent& ev){
+            return MSG_CONTINUE;
         }
         MSG innerprocessEvent(XEvent& ev){
             /*

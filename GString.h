@@ -18,6 +18,7 @@ class GString : public string
         template <typename T>
         GString& operator=(T& s){
             this->assign(s);
+            return *this;
         } ;
         ~GString();
     public:
