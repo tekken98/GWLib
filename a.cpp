@@ -44,6 +44,7 @@ class MW : public GWindow<MW>
         for (int i = 0;i < 7;i++){
             l.addList(str[i]);
             bb.addList(str[i]);
+            list.addList(str[i]);
         }
         GLabel lll("good");
         GLabel btn("button");
@@ -61,7 +62,7 @@ class MW : public GWindow<MW>
         lb.addList("no");
 
 
-       // mid.add(&lb);
+        mid.add(&lb);
         mid.add(&l);
         mid.add(&bb);
         mid.add(&label);
