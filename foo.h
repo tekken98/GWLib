@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <map>
 #include <X11/Xlib.h>
 #endif
 

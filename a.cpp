@@ -71,8 +71,9 @@ class MW : public GWindow<MW>
        // mid.add(&btn);
        low.add(&left);
        low.add(&right);
-       right.add(&lb);
 
+       GButton mb("ok");
+       right.add(&mb);
 
         manager.addLayout(new GLayoutVertical());
         up.addLayout(new GLayoutVertical());
@@ -91,6 +92,7 @@ class MW : public GWindow<MW>
         manager.add(&low);
         addFrame(&manager);
         manager.setBorderWidth(0);
+        setWindowName("fun");
         run();
 
     }

@@ -9,3 +9,5 @@ GString.o:GString.h.gch GString.cpp
 	g++ -c GString.h GString.cpp
 GString.h.gch:GString.h
 	g++ GString.h
+run:a
+	./a
