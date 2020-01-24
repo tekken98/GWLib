@@ -7,7 +7,8 @@ class GM : public GWindow<GM>
     }
     void draw(){};
 };
-GListBox outlist;
+#define ID_FIRST 1000
+#define ID_OUTLIST ID_FIRST
 
 int limit(int a, int b){
     unsigned long r = random();
@@ -15,24 +16,25 @@ int limit(int a, int b){
     ret = r % (b - a + 1) + a;
     return ret;
 }
+#define UP 20 
 GString makePlus(){
     GString a;
-    int first = limit(1,20) ;
-    int second = limit(1,20);
-    while( first + second > 20){
-        first = limit(1,20) ;
-        second = limit(1,20);
+    int first = limit(1,UP) ;
+    int second = limit(1,UP);
+    while( first + second > (UP)){
+        first = limit(1,UP) ;
+        second = limit(1,UP);
     }
     a.format("%2d + %2d = %2d" , first, second , first + second);
     return a;
 }
 GString makeMinus(){
     GString a;
-    int first = limit(1,20) ;
-    int second = limit(1,20);
+    int first = limit(1,UP) ;
+    int second = limit(1,UP);
     int tmp;
     while( first == second){
-        first = limit(1,20);
+        first = limit(1,UP);
     }
     if (first < second){
         tmp = first;
@@ -51,25 +53,28 @@ GString makeMultiply(){
 }
 
 void fplus(const XEvent& ev){
-    outlist.clear();
+    GListBox * p = (GListBox*) GgetWindowMap(ID_OUTLIST);
+    p->clear();
     for (int i = 0;i < 5; i++){
-        outlist.addList(makePlus());
+        p->addList(makePlus());
     }
-    outlist.update();
+    p->update();
 };
 void fminus(const XEvent& ev){
-    outlist.clear();
+    GListBox * p = (GListBox*) GgetWindowMap(ID_OUTLIST);
+    p->clear();
     for (int i = 0;i < 5; i++){
-        outlist.addList(makeMinus());
+        p->addList(makeMinus());
     }
-    outlist.update();
+    p->update();
 };
 void fmultiply(const XEvent& ev){
-    outlist.clear();
+    GListBox * p = (GListBox*) GgetWindowMap(ID_OUTLIST);
+    p->clear();
     for (int i = 0;i < 5; i++){
-        outlist.addList(makeMultiply());
+        p->addList(makeMultiply());
     }
-    outlist.update();
+    p->update();
 };
 
 int main(){
@@ -85,9 +90,11 @@ int main(){
     btnPlus.addEventHandler(fplus);
     btnMinus.addEventHandler(fminus);
     btnMultply.addEventHandler(fmultiply);
-    
+
+    GListBox outlist;
     outlist.addList("you see!");
     outlist.setMaxline(10);
+    outlist.addMap(ID_OUTLIST);
 
     downleft.add(&btnPlus);
     downleft.add(&btnMinus);
@@ -102,6 +109,9 @@ int main(){
     manager.add(&down);
     root.add(&manager);
     root.setWindowName("Homework");
+
+    srandom(time(NULL));
+
     root.run();
     return 0;
 }

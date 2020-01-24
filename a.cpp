@@ -1,7 +1,9 @@
 #include <iostream>
 #include <vector>
+#include <exception>
 #include "GWindow.h"
 //#include <typeinfo>
+#define ID_LIST 1001
 class MW : public GWindow<MW>
 {
     GList * m_list;
@@ -18,8 +20,6 @@ class MW : public GWindow<MW>
                      innerup("inner frame"),
                      innerdown("inner frame"),
                      left("left frame");
-
-
         GList list;
         GEdit ed("one"), ed2("two");
 
@@ -96,7 +96,27 @@ class MW : public GWindow<MW>
         run();
 
     }
-} w;
+};
+class myexception : public exception
+{
+    public:
+        void msg() {
+            cout << "here " << endl;
+        }
+};
+void foo() {
+    int a = 0;
+    if (a == 0){
+            throw(new myexception());
+    }  
+    return;
+}
 int main () {
+    //MW w;
+    try{
+        foo();
+    }catch (myexception * p){
+        p->msg();
+    }
     return 0;
 }

@@ -18,18 +18,13 @@ enum MSG {
     MSG_SELECTED,MSG_NOSELECTED};
 #include <iostream>
 using namespace std;
-template <typename T>
-void msg(T& a)
-{
-    cout << a;
-    std::cout.flush();
-};
 
-template <typename T, typename Y , typename... V>
-void  msg( T& a , Y& y ,  V& ... args)
+void msg(){};
+template <typename T, typename... V>
+void  msg( T& a , V& ... args)
 {
     cout << a ;
-    msg(y,args...);
+    msg(args...);
     std::cout.flush();
 }
 
@@ -145,7 +140,7 @@ class GBase
         Display* m_dpy;
         Window m_win;
         GRect m_win_rect ;
-        std::map<GWindowBase*, int> m_windowMap;
+        std::map<int,GWindowBase*> m_windowMap;
         int m_screennum;
         int m_dpy_width;
         int m_dpy_height;
@@ -203,8 +198,17 @@ class GBase
         void setTopWindowRect(const GRect&r){
             m_win_rect = r;
         }
+        void addMap(int id, GWindowBase * win){
+           m_windowMap.insert(make_pair(id,win)); 
+        }
+        GWindowBase * getMap(int id){
+            return m_windowMap[id];
+        }
 };
 GBase g_base;
+GWindowBase * GgetWindowMap(int id){
+    return g_base.getMap(id);
+};
 typedef void (* EVENT_HANDLER)(const XEvent&);
 
 class GEvent
@@ -389,6 +393,12 @@ class GWindow : public GWindowBase
         virtual ~GWindow(){};
     public:
         //maniulator
+        void addMap(int id){
+            g_base.addMap(id,this);
+        }
+        GWindowBase * getmap(int id){
+            return g_base.getMap(id);
+        }
         void setWindowName(const GString& s){
             XStoreName(g_base.getDisplay(),g_base.getWindow(),
                     s);
