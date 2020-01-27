@@ -165,7 +165,10 @@ class GBase
         }
         GBase(const GBase& s){};
         //GBase& operator=(const GBase& s);
-        ~GBase(){};
+        ~GBase(){
+           if (m_dpy != NULL)
+               XCloseDisplay(m_dpy);
+        };
         //~GBase(){XCloseDisplay(m_dpy);};
     public:
         //maniulator
@@ -242,6 +245,7 @@ class GWindowBase
         GRect m_client_rect;
         GRect m_reservedrect;
         GRect m_title_rect;
+        static XFontStruct* mp_font_struct;
         int m_border_width = 2;
         bool m_need_draw = true;
     public:
@@ -250,7 +254,15 @@ class GWindowBase
         GWindowBase(const GString &s){ m_title = s;};
         //GWindowBase(const GWindowBase& s);
         //GWindowBase& operator=(const GWindowBase& s);
-        //~GWindowBase();
+        ~GWindowBase(){
+            if (m_gc != NULL){
+                XFreeGC(g_base.getDisplay(),m_gc);
+            }
+            if ( mp_font_struct != NULL){
+                //XFreeFont(g_base.getDisplay(),mp_font_struct);
+                mp_font_struct = NULL;
+            }
+        };
     public:
         //maniulator
         //accessor
@@ -356,8 +368,11 @@ class GWindowBase
         GRect getFontStringRect(const char* str) {
             int direction,ascent,descent;
             XCharStruct overall;
+            //const char * fontname = "9x15";
+            //XFontStruct * p = XLoadQueryFont(getDisplay(),fontname);
             XFontStruct * p = XQueryFont(getDisplay(),XGContextFromGC(getGC()));
             XTextExtents(p,(char*)str,strlen(str),&direction,&ascent,&descent,&overall);
+            //XFreeFont(getDisplay(),p);
             return GRect(0,descent,overall.width,(ascent+descent)+descent);
         }
         int getFontStringBaseline(const char* str){
@@ -377,6 +392,8 @@ class GWindowBase
         virtual void    draw() = 0;
         virtual void    layout() {};
 };
+XFontStruct* GWindowBase::mp_font_struct = NULL;
+
 template <typename T>
 class GWindow : public GWindowBase
 {
@@ -393,6 +410,11 @@ class GWindow : public GWindowBase
         virtual ~GWindow(){};
     public:
         //maniulator
+        void centerWindow(const GRect& parentRect, GRect& thisRect){
+            int cx = (parentRect.width() - thisRect.width()) / 2;
+            int cy = (parentRect.height() - thisRect.height()) / 2;
+            thisRect.move(parentRect.x1 + cx, parentRect.y1 + cy);
+        }
         void addMap(int id){
             g_base.addMap(id,this);
         }
@@ -428,13 +450,20 @@ class GWindow : public GWindowBase
             XDrawString(getDisplay(), getWindow(), getGC(), 
                     pt.x + 2 + x, pt.y + y, str, strlen(str));
         }
-        void drawStringCenter(const GRect& r,const char * str){
+        void drawString(const GPoint& p, const char * str){
+            drawString(p.x, p.y, str);
+        }
+        void drawStringCenterY(const GRect& r,const char * str){
+            GPoint p = getStringCenterXY(r,str);
+            drawString(p,str);
+        }
+        GPoint getStringCenterXY(const GRect& r, const char * str){
             GRect fr = getFontStringRect(str);
             int baseh = fr.y1;
-            int x; 
+            unsigned int x; 
             x = (r.width() - fr.width())/2 ;
             int y = r.y2 - ((r.height() - fr.height()) / 2) - baseh;
-            drawString(x,y,str);
+            return GPoint(x,y);
         }
         void drawRectangle(const GRect& cr){
             GRect r = cr;
@@ -464,20 +493,52 @@ class GWindow : public GWindowBase
         {
             XMapWindow(getDisplay(),getWindow());
             XEvent ev;
+            GRect r;
+            timeval tv;
+            fd_set fd;
+            int connectfd;
+            connectfd=ConnectionNumber(getDisplay());
             g_base.centerWindow(-1);
+            Atom wmDelete = XInternAtom(getDisplay(),
+                    "WM_DELETE_WINDOW",true);
+            XSetWMProtocols(getDisplay(),getWindow(),&wmDelete,1);
             while(1){
+                FD_ZERO(&fd);
+                FD_SET(connectfd,&fd);
+                tv.tv_usec = 0;
+                tv.tv_sec = 1;
+                int num = select(connectfd + 1,
+                        &fd,NULL,NULL,&tv);
+                if (num >0){
+                    //msg("receive event \n");
+                }else if (num == 0){
+                    //msg("time fired \n");
+                }else {
+                    msg("quit \n");
+                    return;
+                }
+                while(XPending(getDisplay())) {
                 XNextEvent(getDisplay(),&ev);
                 for (auto a : m_pv_childs){
                     switch(ev.type){
                         case Expose:
                             //case ConfigureNotify:
-                            GRect r = GRect(0,0,ev.xexpose.width,ev.xexpose.height);
+                            r = GRect(0,0,ev.xexpose.width,ev.xexpose.height);
                             a->setWindowRectInParent(r);
                             //a->recalcRect();
                             break;
+                        case DestroyNotify:
+                            msg("quit\n");
+                            return;
+                        case ClientMessage:
+                            XUnmapWindow(getDisplay(),getWindow());
+                            msg("quit\n");
+                            return;
                     }
                     a->processEvent(ev);
                 }
+                }
+                //break;
             }
         }
  
@@ -485,7 +546,7 @@ class GWindow : public GWindowBase
             GRect rr = r;
             drawSolid(rr,highlighcolor);
             setForeground(COLORWHITE);
-            drawStringCenter(rr,showStr);
+            drawStringCenterY(rr,showStr);
         }
         GRect getDrawStringRect(std::vector<GString>&v,int from, int to){
             GRect r;
@@ -652,16 +713,21 @@ class GButton : public GWindow<GButton> , public GEvent
         GButton(const GString& s) : m_default_rect{0,0,50,30}{
             setTitle(s);
         }
+        virtual void layout(){
+            
+        }
         virtual void    recalcRect(){
             GRect p = getWindowRectInParent();
+            //p.add(b,b);
             GRect r = m_default_rect;
             GRect fr = getFontStringRect(getTitle());
+            fr.move(0,0);
             GRect d;
-            if (r.width() > fr.width())
-                d = r;
-            else
-                d = fr;
-            d.move(p.x1,p.y1);
+            d = r;
+            if (r.width() < fr.width()){
+                d.x2 = fr.x2 + 10;
+            }
+            centerWindow(p,d);
             setWindowRectInParent(d);
         }; 
         virtual MSG     processEvent(const XEvent& e){
@@ -689,7 +755,7 @@ class GButton : public GWindow<GButton> , public GEvent
                 r.move(0,0);
                 drawSolid(r,COLORMID);
                 drawFrame(r, COLORWHITE,COLORBLACK);
-                drawStringCenter(r,getTitle());
+                drawStringCenterY(r,getTitle());
             }
             needDraw(false);
         };
@@ -697,13 +763,13 @@ class GButton : public GWindow<GButton> , public GEvent
                 GRect r = getWindowRectInParent();
                 r.move(0,0);
                 drawFrame(r,COLORBLACK, COLORWHITE);
-                drawStringCenter(r,getTitle());
+                drawStringCenterY(r,getTitle());
         }
         void drawUp(){
                 GRect r = getWindowRectInParent();
                 r.move(0,0);
                 drawFrame(r, COLORWHITE,COLORBLACK);
-                drawStringCenter(r,getTitle());
+                drawStringCenterY(r,getTitle());
         }
         void onButtonDown(const XEvent& ev){
             drawDown();
@@ -849,7 +915,7 @@ class GLabel : public GWindow<GLabel>, public GEvent
             drawSolid(r,COLORMID);
             drawFrame(r,COLORRED,COLORRED);
             setForeground(COLORWHITE);
-            drawStringCenter(r,getTitle());
+            drawStringCenterY(r,getTitle());
         }
 
         //maniulator
@@ -1147,7 +1213,7 @@ class GListBox : public GWindow<GListBox>
     GRect m_top;
     GRect m_vertbar;
     GRect m_horibar;
-    int m_top_height = 0;
+    int m_top_height = 2;
     int m_item_count = 1;
     int m_item_length = 1;
     std::vector<GString> m_strings;
@@ -1436,7 +1502,7 @@ class GList  :public  GWindow<GList>
             drawSolid(r,COLORWHITE);
             drawFrame(r);
             drawLeftArrow(r);
-            drawStringCenter(r,getTitle());
+            drawStringCenterY(r,getTitle());
             needDraw(false);
         }
         MSG onExpose(){
@@ -1539,7 +1605,7 @@ class GStatus : public GWindow<GStatus>
                drawFrame(r1,COLORWHITE,COLORBLACK);
                */
             setForeground(COLORWHITE); 
-            drawStringCenter(r,getTitle());
+            drawStringCenterY(r,getTitle());
         }
         //accessor
 };
@@ -1627,7 +1693,7 @@ class GFrame : public GWindow<GFrame>, public GEvent
             if (isReserved())
                 return;
             drawSolid(r,COLORMID);
-            //GWindow::drawFrame(r);
+            GWindow::drawFrame(r);
             //m_StatusBar.draw();
         }
         MSG processEvent(XEvent& ev){
@@ -1742,12 +1808,12 @@ class GLayoutVertical : public GLayout
 class GFrameLayout : public GFrame
 {
     private :
-        GLayout * m_layout;
+        GLayout * m_layout = NULL;
+    public:
         void layout(){
             GFrame::recalcRect();
             m_layout->layout();
         }
-    public:
         GFrameLayout(const GString& s) : GFrame(s){
             m_layout = new GLayoutVertical();
             m_layout->setFrame(this);
@@ -1757,10 +1823,14 @@ class GFrameLayout : public GFrame
             m_layout->setFrame(this);
         }
         ~GFrameLayout(){
-            if (m_layout != NULL)
+            if (m_layout != NULL){
                 delete m_layout;
+            }
         }
         void addLayout(GLayout * l){
+            // memory leak
+            if (m_layout != NULL)
+                delete m_layout;
             m_layout = l;
             l->setFrame(this);
         }

@@ -9,6 +9,7 @@ class GM : public GWindow<GM>
 };
 #define ID_FIRST 1000
 #define ID_OUTLIST ID_FIRST
+#define ID_FRAMEDOWN ID_FIRST + 1
 
 int limit(int a, int b){
     unsigned long r = random();
@@ -76,6 +77,13 @@ void fmultiply(const XEvent& ev){
     }
     p->update();
 };
+void ftest(const XEvent& ev){
+    GFrameLayout * p = new GFrameLayout();
+    GFrameLayout * d = (GFrameLayout*)GgetWindowMap(ID_FRAMEDOWN);
+    d->add(p);
+    d->layout();
+    d->getParent()->draw();
+};
 
 int main(){
     GFrameLayout manager("manager");
@@ -86,10 +94,13 @@ int main(){
 
     GButton btnPlus("Plus"),
             btnMinus("Minus"),
-            btnMultply("Multiply");
+            btnMultply("Multiply"),
+            btnTest("Test");
+            
     btnPlus.addEventHandler(fplus);
     btnMinus.addEventHandler(fminus);
     btnMultply.addEventHandler(fmultiply);
+    btnTest.addEventHandler(ftest);
 
     GListBox outlist;
     outlist.addList("you see!");
@@ -99,15 +110,18 @@ int main(){
     downleft.add(&btnPlus);
     downleft.add(&btnMinus);
     downleft.add(&btnMultply);
+    downleft.add(&btnTest);
 
     downright.add(&outlist);
 
     down.add(&downleft);
     down.add(&downright);
     down.addLayout(new GLayoutHori());
+    down.addMap(ID_FRAMEDOWN);
 
-    manager.add(&down);
-    root.add(&manager);
+    //manager.add(&down);
+    //root.add(&manager);
+    root.add(&down);
     root.setWindowName("Homework");
 
     srandom(time(NULL));

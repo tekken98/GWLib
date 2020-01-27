@@ -1,9 +1,37 @@
 #include <iostream>
 #include <vector>
 #include <exception>
+#include <memory>
 #include "GWindow.h"
 //#include <typeinfo>
 #define ID_LIST 1001
+class dlg : public GWindow<dlg>
+{
+    GFrameLayout*  manager = NULL;
+    GButton * ok = NULL;
+    GButton * cancel = NULL;
+    public:
+    dlg(){
+        manager = (new GFrameLayout("dlg"));
+        ok = new GButton("ok");
+        cancel = new GButton("cancel");
+        manager->add(ok);
+        manager->add(cancel);
+        manager->addLayout(new GLayoutHori());
+        addFrame(manager);
+        setWindowName("Dlg");
+        setWindowRectInParent(0,0,200,200);
+    }
+    void show(){
+        run();
+    }
+    ~dlg(){
+        delete ok;
+        delete cancel;
+        delete manager;
+    }
+    void draw(){};
+};
 class MW : public GWindow<MW>
 {
     GList * m_list;
@@ -12,14 +40,16 @@ class MW : public GWindow<MW>
         msg(m_list->getTitle());
     }
     MW(){
+        //setWindowRectInParent(0,0,400,400);
         GFrameLayout manager("Manager");
         GFrameLayout up("up frame"), 
                      mid("mid frame"), 
                      right("right frame"),
-                     low("low frame"),
+                    low("low frame"),
                      innerup("inner frame"),
                      innerdown("inner frame"),
                      left("left frame");
+
         GList list;
         GEdit ed("one"), ed2("two");
 
@@ -72,9 +102,8 @@ class MW : public GWindow<MW>
        low.add(&left);
        low.add(&right);
 
-       GButton mb("ok");
+       GButton mb("okman");
        right.add(&mb);
-
         manager.addLayout(new GLayoutVertical());
         up.addLayout(new GLayoutVertical());
         mid.addLayout(new GLayoutHori());
@@ -88,35 +117,16 @@ class MW : public GWindow<MW>
         
         manager.add(&up);
         manager.add(&mid);
-        //manager.add(&down);
         manager.add(&low);
         addFrame(&manager);
         manager.setBorderWidth(0);
         setWindowName("fun");
         run();
-
     }
 };
-class myexception : public exception
-{
-    public:
-        void msg() {
-            cout << "here " << endl;
-        }
-};
-void foo() {
-    int a = 0;
-    if (a == 0){
-            throw(new myexception());
-    }  
-    return;
-}
 int main () {
-    //MW w;
-    try{
-        foo();
-    }catch (myexception * p){
-        p->msg();
-    }
+    dlg d;
+    d.show();
+    MW w;
     return 0;
 }

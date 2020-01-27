@@ -30,6 +30,7 @@ void GString::format(const char* fmt, ...)
 }
 GString::~GString()
 {
+    //std::cout << ("GString desctruction \n");
 }
 GString::GString()
 {
