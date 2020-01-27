@@ -368,10 +368,11 @@ class GWindowBase
         GRect getFontStringRect(const char* str) {
             int direction,ascent,descent;
             XCharStruct overall;
-            //const char * fontname = "9x15";
+            //const char * fontname = "";
             //XFontStruct * p = XLoadQueryFont(getDisplay(),fontname);
-            XFontStruct * p = XQueryFont(getDisplay(),XGContextFromGC(getGC()));
-            XTextExtents(p,(char*)str,strlen(str),&direction,&ascent,&descent,&overall);
+            //XFontStruct * p = XQueryFont(getDisplay(),XGContextFromGC(getGC()));
+            XQueryTextExtents(getDisplay(),XGContextFromGC(getGC()),
+                (char*)str,strlen(str),&direction,&ascent,&descent,&overall);
             //XFreeFont(getDisplay(),p);
             return GRect(0,descent,overall.width,(ascent+descent)+descent);
         }

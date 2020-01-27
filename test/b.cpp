@@ -100,7 +100,7 @@ int main(){
     btnPlus.addEventHandler(fplus);
     btnMinus.addEventHandler(fminus);
     btnMultply.addEventHandler(fmultiply);
-    btnTest.addEventHandler(ftest);
+    //btnTest.addEventHandler(ftest);
 
     GListBox outlist;
     outlist.addList("you see!");
