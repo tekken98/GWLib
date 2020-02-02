@@ -78,24 +78,20 @@ class MW : public GWindow<MW>
         }
         GLabel lll("good");
         GLabel btn("button");
-
-        lb.addList("good");
-        lb.addList("bad1");
-        lb.addList("bad2");
-        lb.addList("bad3");
-        lb.addList("bad4");
-        lb.addList("bad5");
-        lb.addList("bad6");
-        lb.addList("bad7");
-        lb.addList("bad8");
-        lb.addList("bad9");
-        lb.addList("no");
+        char ** fonts;
+        int font_count;
+        fonts = XListFonts(getDisplay(),"*gb*",10000,&font_count);
+        for (int i = 0; i< font_count; i++)
+        {
+            lb.addList(fonts[i]);
+        }
+        XFreeFontNames(fonts);
 
 
         mid.add(&lb);
-        mid.add(&l);
-        mid.add(&bb);
-        mid.add(&label);
+        //mid.add(&l);
+        //mid.add(&bb);
+        //mid.add(&label);
         //mid.add(&lll);
        // mid.add(&lb);
        // mid.add(&btn);
@@ -103,8 +99,9 @@ class MW : public GWindow<MW>
        low.add(&right);
 
        GButton mb("okman");
+       mb.setFont();
        right.add(&mb);
-        manager.addLayout(new GLayoutVertical());
+        manager.addLayout(new GLayoutHori());
         up.addLayout(new GLayoutVertical());
         mid.addLayout(new GLayoutHori());
         right.addLayout(new GLayoutVertical());
@@ -115,7 +112,7 @@ class MW : public GWindow<MW>
         left.add(&innerup);
         left.add(&innerdown);
         
-        manager.add(&up);
+        //manager.add(&up);
         manager.add(&mid);
         manager.add(&low);
         addFrame(&manager);
@@ -125,8 +122,8 @@ class MW : public GWindow<MW>
     }
 };
 int main () {
-    dlg d;
-    d.show();
+    //dlg d;
+    //d.show();
     MW w;
     return 0;
 }

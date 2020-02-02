@@ -89,6 +89,7 @@ int main(){
     GFrameLayout manager("manager");
     GFrameLayout downleft("buttons"),
                  downright("results"),
+                 downlist("font lists"),
                  down("operator");
     GM root("root window");
 
@@ -104,18 +105,21 @@ int main(){
 
     GListBox outlist;
     outlist.addList("you see!");
-    outlist.setMaxline(10);
     outlist.addMap(ID_OUTLIST);
+    downright.add(&outlist);
+
+    GListBox fontlist;
+    downlist.add(&fontlist);
 
     downleft.add(&btnPlus);
     downleft.add(&btnMinus);
     downleft.add(&btnMultply);
     downleft.add(&btnTest);
 
-    downright.add(&outlist);
 
     down.add(&downleft);
     down.add(&downright);
+   // down.add(&downlist);
     down.addLayout(new GLayoutHori());
     down.addMap(ID_FRAMEDOWN);
 

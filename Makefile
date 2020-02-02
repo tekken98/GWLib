@@ -1,6 +1,6 @@
 a:a.cpp GWindow.h.gch GString.o foo.h.gch
 	g++ -g a.cpp GString.o -lX11 -o a
-	./a
+	#./a
 GWindow.h.gch:GWindow.h
 	g++ -g GWindow.h
 foo.h.gch:foo.h
