@@ -5,29 +5,63 @@
 #include "GWindow.h"
 //#include <typeinfo>
 #define ID_LIST 1001
+const int ID_DIALOG = 2001;
 class dlg : public GWindow<dlg>
 {
+    private:
     GFrameLayout*  manager = NULL;
+    GFrameLayout* up = NULL;
+    GFrameLayout* down = NULL;
     GButton * ok = NULL;
     GButton * cancel = NULL;
-    public:
+    GLabel* info=NULL ;
+ 
+        static void onOk(const XEvent& ev){
+            cout << "ok" << endl;
+            dlg * d = (dlg*)GgetWindowMap(ID_DIALOG);
+            d->quit();
+        }
+        static void onCancel(const XEvent& ev){
+            cout << "cancel" << endl;
+            dlg* d = (dlg*)GgetWindowMap(ID_DIALOG);
+            d->quit();
+        }
+        void quit(){
+            setQuit(true);
+        }
+   public:
     dlg(){
-        manager = (new GFrameLayout("dlg"));
+        manager = new GFrameLayout("dlg");
+        up = new GFrameLayout("up");
+        info  = new GLabel("good man");
+        up->add(info);
+
+        down = new GFrameLayout("down");
         ok = new GButton("ok");
+        ok->addEventHandler(onOk);
         cancel = new GButton("cancel");
-        manager->add(ok);
-        manager->add(cancel);
-        manager->addLayout(new GLayoutHori());
+        cancel->addEventHandler(onCancel);
+        down->add(ok);
+        down->add(cancel);
+        down->addLayout(new GLayoutHori());
+
+        manager->addFrame(up);
+        manager->addFrame(down);
         addFrame(manager);
+
         setWindowName("Dlg");
         setWindowRectInParent(0,0,200,200);
+        addMap(ID_DIALOG); 
     }
     void show(){
         run();
     }
     ~dlg(){
+        delete info;
         delete ok;
         delete cancel;
+        delete up;
+        delete down;
         delete manager;
     }
     void draw(){};
@@ -89,19 +123,20 @@ class MW : public GWindow<MW>
 
 
         mid.add(&lb);
-        //mid.add(&l);
-        //mid.add(&bb);
-        //mid.add(&label);
-        //mid.add(&lll);
-       // mid.add(&lb);
-       // mid.add(&btn);
+        lb.setMaxLine(10);
+        mid.add(&l);
+        mid.add(&bb);
+        mid.add(&label);
+        mid.add(&lll);
+
        low.add(&left);
        low.add(&right);
 
        GButton mb("okman");
        mb.setFont();
-       right.add(&mb);
-        manager.addLayout(new GLayoutHori());
+
+        right.add(&mb);
+        manager.addLayout(new GLayoutVertical());
         up.addLayout(new GLayoutVertical());
         mid.addLayout(new GLayoutHori());
         right.addLayout(new GLayoutVertical());
@@ -112,7 +147,7 @@ class MW : public GWindow<MW>
         left.add(&innerup);
         left.add(&innerdown);
         
-        //manager.add(&up);
+        manager.add(&up);
         manager.add(&mid);
         manager.add(&low);
         addFrame(&manager);
@@ -122,8 +157,8 @@ class MW : public GWindow<MW>
     }
 };
 int main () {
-    //dlg d;
-    //d.show();
+  //  dlg d;
+  //  d.show();
     MW w;
     return 0;
 }

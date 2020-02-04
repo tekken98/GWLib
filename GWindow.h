@@ -411,6 +411,7 @@ class GWindow : public GWindowBase
     private:
         std::vector<GWindowBase*> m_pv_childs;
         bool m_focused = false;
+        bool m_quit = false;
         GFont m_font;
     public:
         //constructor
@@ -422,6 +423,9 @@ class GWindow : public GWindowBase
         virtual ~GWindow(){};
     public:
         //maniulator
+        void setQuit(bool f){
+            m_quit = f;
+        }
         void centerWindow(const GRect& parentRect, GRect& thisRect){
             int cx = (parentRect.width() - thisRect.width()) / 2;
             int cy = (parentRect.height() - thisRect.height()) / 2;
@@ -481,16 +485,13 @@ class GWindow : public GWindowBase
             drawString(p,a.c_str());
         }
         GPoint getStringCenterXY(const GRect& r, const char * str){
-            int w ; 
             GRect fr = getFontStringRect(str);
-            if (fr.width() > r.width()){
-               w = r.width();
-            }else
-                w = fr.width();
+            int w = max<int>(fr.width(),r.width());
+            int h = max<int>(r.height(),fr.height());
             int baseh = fr.y1;
             unsigned int x; 
             x = (w - fr.width())/2 ;
-            int y = r.y2 - ((r.height() - fr.height()) / 2) - baseh;
+            int y = r.y2 - ((h - fr.height()) / 2) - baseh;
             return GPoint(x,y);
         }
         void drawRectangle(const GRect& cr){
@@ -531,6 +532,10 @@ class GWindow : public GWindowBase
                     "WM_DELETE_WINDOW",true);
             XSetWMProtocols(getDisplay(),getWindow(),&wmDelete,1);
             while(1){
+                if (m_quit == true){
+                    XUnmapWindow(getDisplay(),getWindow());
+                    return;
+                }
                 FD_ZERO(&fd);
                 FD_SET(connectfd,&fd);
                 tv.tv_usec = 0;
@@ -551,8 +556,12 @@ class GWindow : public GWindowBase
                     switch(ev.type){
                         case Expose:
                             //case ConfigureNotify:
-                            r = GRect(0,0,ev.xexpose.width,ev.xexpose.height);
-                            a->setWindowRectInParent(r);
+                            r = GRect(0,0,
+                                    ev.xexpose.x + ev.xexpose.width,
+                                    ev.xexpose.y+ev.xexpose.height);
+                            r.dump();
+                            if (r.height()  > 0 && r.width() > 0 && ev.xexpose.count == 0)
+                                a->setWindowRectInParent(r);
                             //a->recalcRect();
                             break;
                         case DestroyNotify:
@@ -695,7 +704,8 @@ class GScrollBar : public GWindow<GScrollBar>
                 return;
             GRect r = getWindowRectInParent();
             r.move(0,0);
-            drawSolid(r,COLORRED); 
+            //drawSolid(r,COLORRED); 
+            drawFrame(r,COLORRED, COLORRED);
         };
         bool isButtonPressing() {
             return m_buttonPressing;
@@ -738,7 +748,6 @@ class GButton : public GWindow<GButton> , public GEvent
             setFont();
         }
         virtual void layout(){
-            
         }
         virtual void    recalcRect(){
             GRect p = getWindowRectInParent();
@@ -862,7 +871,7 @@ class GEdit : public GWindow<GEdit>, public GEvent
         int m_cursor_position = 1;
     public:
         // ev x y has changed to local window 
-        MSG processEvent(XEvent& e){ wchar_t buf[128];
+        MSG processEvent(const XEvent& e){ wchar_t buf[128];
             XEvent ev = xevevtToContainer(e);
             if (ev.type == Expose){
                 draw();
@@ -904,9 +913,7 @@ class GEdit : public GWindow<GEdit>, public GEvent
                 needDraw(true);
             }
             if (needDraw()){
-                // no other window draw only self draw in this process
                 draw();
-                return MSG_NODRAW;
             }
             return MSG_CONTINUE;
         }
@@ -963,12 +970,9 @@ class GEdit : public GWindow<GEdit>, public GEvent
 
         //maniulator
         void draw() {
-            if (!needDraw())
-                return;
             drawFocus();
             if (m_focus)
                 drawCursor();
-            needDraw(false);
         }
         //accessor
 };
@@ -992,14 +996,13 @@ class GLabel : public GWindow<GLabel>, public GEvent
         }
 
         //maniulator
-        void draw() {
+        virtual void draw() {
             drawUpdate();
-            needDraw(false);
         }
-        MSG processEvent(XEvent& ev){
+        virtual MSG processEvent(const XEvent& ev){
             if (ev.type == Expose){
                 draw();
-                return MSG_NODRAW;
+                //return MSG_NODRAW;
             }
             return MSG_CONTINUE;
         }
@@ -1324,6 +1327,9 @@ class GListBox : public GWindow<GListBox>
             return m_strings[m_select];
         else
             return "";
+    }
+    void setMaxLine(int m){
+        m_maxline = m;
     }
     int setSelected(int w){
         if (w >=0 && w < m_strings.size()){
@@ -1727,10 +1733,18 @@ class GFrame : public GWindow<GFrame>, public GEvent
 {
     private:
         GStatus m_StatusBar;
+        bool m_showStatus= false;
         GMenu* m_menu = NULL;
+        bool m_showFrame  = false;
         bool m_init = false;
         GWindowBase* m_targetWin = NULL;
     public:
+        void showStatus(bool f){
+            m_showStatus = f;
+        }
+        void showFrame(bool f){
+            m_showStatus = f;
+        }
         virtual void draw() {
             drawFrame();
             if(m_menu != NULL){
@@ -1805,8 +1819,8 @@ class GFrame : public GWindow<GFrame>, public GEvent
             if (isReserved())
                 return;
             drawSolid(r,COLORMID);
-            GWindow::drawFrame(r);
-            //m_StatusBar.draw();
+            if (m_showFrame == true)
+                GWindow::drawFrame(r);
         }
         MSG processEvent(XEvent& ev){
             return MSG_CONTINUE;
@@ -1849,8 +1863,8 @@ class GFrame : public GWindow<GFrame>, public GEvent
                 m_targetWin = NULL;
             }
             // Expose have many events
-            //updateStatus();
-            drawStatus(ev);
+            if (m_showStatus == true)
+                drawStatus(ev);
             return MSG_CONTINUE;
         }
 };

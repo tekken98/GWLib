@@ -53,36 +53,51 @@ GString makeMultiply(){
     return a;
 }
 
+void fplusimpl();
+void fminusimpl();
+void fmultiplyimpl();
 void fplus(const XEvent& ev){
     GListBox * p = (GListBox*) GgetWindowMap(ID_OUTLIST);
     p->clear();
+    fplusimpl();
+};
+void fplusimpl(){
+    GListBox * p = (GListBox*) GgetWindowMap(ID_OUTLIST);
     for (int i = 0;i < 5; i++){
         p->addList(makePlus());
     }
     p->update();
-};
+}
 void fminus(const XEvent& ev){
     GListBox * p = (GListBox*) GgetWindowMap(ID_OUTLIST);
     p->clear();
+    fminusimpl();
+};
+void fminusimpl(){
+    GListBox * p = (GListBox*) GgetWindowMap(ID_OUTLIST);
     for (int i = 0;i < 5; i++){
         p->addList(makeMinus());
     }
     p->update();
-};
+}
 void fmultiply(const XEvent& ev){
     GListBox * p = (GListBox*) GgetWindowMap(ID_OUTLIST);
     p->clear();
+    fmultiplyimpl();
+};
+void fmultiplyimpl(){
+    GListBox * p = (GListBox*) GgetWindowMap(ID_OUTLIST);
     for (int i = 0;i < 5; i++){
         p->addList(makeMultiply());
     }
     p->update();
-};
+}
 void ftest(const XEvent& ev){
-    GFrameLayout * p = new GFrameLayout();
-    GFrameLayout * d = (GFrameLayout*)GgetWindowMap(ID_FRAMEDOWN);
-    d->add(p);
-    d->layout();
-    d->getParent()->draw();
+    GListBox * p = (GListBox*) GgetWindowMap(ID_OUTLIST);
+    p->clear();
+   fplusimpl();
+   fminusimpl();
+   fmultiplyimpl();
 };
 
 int main(){
@@ -101,11 +116,12 @@ int main(){
     btnPlus.addEventHandler(fplus);
     btnMinus.addEventHandler(fminus);
     btnMultply.addEventHandler(fmultiply);
-    //btnTest.addEventHandler(ftest);
+    btnTest.addEventHandler(ftest);
 
     GListBox outlist;
     outlist.addList("you see!");
     outlist.addMap(ID_OUTLIST);
+    outlist.setMaxLine(15);
     downright.add(&outlist);
 
     GListBox fontlist;
