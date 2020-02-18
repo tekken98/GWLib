@@ -101,10 +101,9 @@ void ftest(const XEvent& ev){
 };
 
 int main(){
-    GFrameLayout manager("manager");
+    //GFrameLayout manager("manager");
     GFrameLayout downleft("buttons"),
                  downright("results"),
-                 downlist("font lists"),
                  down("operator");
     GM root("root window");
 
@@ -124,8 +123,6 @@ int main(){
     outlist.setMaxLine(15);
     downright.add(&outlist);
 
-    GListBox fontlist;
-    downlist.add(&fontlist);
 
     downleft.add(&btnPlus);
     downleft.add(&btnMinus);
@@ -135,7 +132,6 @@ int main(){
 
     down.add(&downleft);
     down.add(&downright);
-   // down.add(&downlist);
     down.addLayout(new GLayoutHori());
     down.addMap(ID_FRAMEDOWN);
 

@@ -1,6 +1,7 @@
 #ifndef GWINDOW_H
 #define GWINDOW_H
 #include "foo.h"
+#include <algorithm>
 #include <cassert>
 #include "GString.h"
 using std::string;
@@ -13,9 +14,10 @@ const int COLORWHITE = 0xffffff;
 const int COLORBLACK = 0x0;
 const int COLORBLUE  = 0x0000ff;
 const int COLORRED  = 0xff0000;
+const int COLORGREEN  = 0x00ff00;
 enum MSG {
     MSG_VOID=1, MSG_REDRAW,MSG_CONTINUE,MSG_NODRAW,
-    MSG_SELECTED,MSG_NOSELECTED};
+    MSG_SELECTED,MSG_NOSELECTED,MSG_CLOSE,MSG_HANDLED,MSG_NO_HANDLED};
 #include <iostream>
 using namespace std;
 
@@ -98,6 +100,13 @@ class GRect
             y2 += y;
             return *this;
         }
+        GRect& sub(int x, int y){
+            x1 -= x;
+            y1 -= y;
+            x2 -= x;
+            y2 -= y;
+            return * this;
+        }
         GRect& add(const GPoint & pt){
             x1 += pt.x;
             y1 += pt.y;
@@ -157,6 +166,7 @@ class GBase
         int m_dpy_width;
         int m_dpy_height;
         GString m_window_name;
+        GWindowBase * m_focus_win;
     public:
         //constructor
         GBase(){
@@ -174,6 +184,13 @@ class GBase
                     |PointerMotionMask|KeyPressMask
                     );
             m_win_rect = GRect(0,0,400,400);
+            m_focus_win = NULL;
+        }
+        GWindowBase * getFocused(){
+            return m_focus_win;
+        }
+        void setFocus(GWindowBase * w){
+            m_focus_win = w;
         }
         GBase(const GBase& s){};
         //GBase& operator=(const GBase& s);
@@ -259,7 +276,24 @@ class GWindowBase
         GRect m_title_rect;
         int m_border_width = 2;
         bool m_need_draw = true;
+        bool m_fixed = false;
+        bool m_visible = false;
     public:
+        void setVisible(bool b){
+            m_visible = b;
+        }
+        bool isVisible(){
+            return m_visible;
+        }
+        GWindowBase * getFocused(){
+            return g_base.getFocused();
+        }
+        void setFocus(){
+            g_base.setFocus(this);
+        }
+        void clearFocus(){
+            g_base.setFocus(NULL);
+        }
         //constructor
         GWindowBase():m_parent(NULL),m_title("NoName"), m_gc(NULL),m_window_rect(0,0,0,0),m_reservedrect(0,0,0,0){};
         GWindowBase(const GString &s){ m_title = s;};
@@ -273,6 +307,12 @@ class GWindowBase
     public:
         //maniulator
         //accessor
+        bool isFixed(){
+            return m_fixed;
+        }
+        void setFixed(bool b){
+            m_fixed = b;
+        }
         bool isCrossRect(const GRect& r1, const GRect& r2){
             if ( r1.x1  >= r2.x2) return false;
             if ( r1.x2  <= r2.x1 ) return false;
@@ -292,14 +332,19 @@ class GWindowBase
         }
         void            setParent(GWindowBase * p){ m_parent = p; };
         GWindowBase*    getParent(){ return m_parent;};
-
-        // child window rect  is at parent's xy
+       // child window rect  is at parent's xy
         GPoint          getAbsolutePosition(){
             GPoint pt = GPoint(m_window_rect.x1, m_window_rect.y1);
             if (m_parent == NULL)
                 return pt;
             pt += m_parent->getAbsolutePosition(); 
             return pt;
+        }
+        GRect           getAbsoluteRect(){
+            GPoint p = getAbsolutePosition();
+            GRect r = getWindowRectInParent();
+            r.move(p.x,p.y);
+            return r;
         }
         XEvent xevevtToContainer(const XEvent& e){
             XEvent ev = e;
@@ -394,6 +439,9 @@ class GWindowBase
             needDraw(true);
             draw();
         }
+        virtual bool invalidRect(const GRect&){
+            return false;
+        };
 
         virtual void    recalcRect(){ 
             GRect  r = getWindowRectInParent(); 
@@ -411,7 +459,6 @@ class GWindow : public GWindowBase
     private:
         std::vector<GWindowBase*> m_pv_childs;
         bool m_focused = false;
-        bool m_quit = false;
         GFont m_font;
     public:
         //constructor
@@ -423,8 +470,16 @@ class GWindow : public GWindowBase
         virtual ~GWindow(){};
     public:
         //maniulator
-        void setQuit(bool f){
-            m_quit = f;
+        GWindow*    getRootParent(){
+            GWindowBase* p = this;
+            while(p->getParent() != NULL)
+                p = p->getParent();
+            return (GWindow*)p;
+        }
+        bool findChild(GWindowBase * child){
+            //std::vector<GWindowBase*>::iterator it; 
+            auto it = find(m_pv_childs.begin(),m_pv_childs.end(),child);
+            return (it != m_pv_childs.end());
         }
         void centerWindow(const GRect& parentRect, GRect& thisRect){
             int cx = (parentRect.width() - thisRect.width()) / 2;
@@ -518,67 +573,7 @@ class GWindow : public GWindowBase
         }
 
         std::vector<GWindowBase*> getChilds() { return m_pv_childs;};
-        void run()
-        {
-            XMapWindow(getDisplay(),getWindow());
-            XEvent ev;
-            GRect r;
-            timeval tv;
-            fd_set fd;
-            int connectfd;
-            connectfd=ConnectionNumber(getDisplay());
-            g_base.centerWindow(-1);
-            Atom wmDelete = XInternAtom(getDisplay(),
-                    "WM_DELETE_WINDOW",true);
-            XSetWMProtocols(getDisplay(),getWindow(),&wmDelete,1);
-            while(1){
-                if (m_quit == true){
-                    XUnmapWindow(getDisplay(),getWindow());
-                    return;
-                }
-                FD_ZERO(&fd);
-                FD_SET(connectfd,&fd);
-                tv.tv_usec = 0;
-                tv.tv_sec = 1;
-                int num = select(connectfd + 1,
-                        &fd,NULL,NULL,&tv);
-                if (num >0){
-                    //msg("receive event \n");
-                }else if (num == 0){
-                    //msg("time fired \n");
-                }else {
-                    msg("quit \n");
-                    return;
-                }
-                while(XPending(getDisplay())) {
-                XNextEvent(getDisplay(),&ev);
-                for (auto a : m_pv_childs){
-                    switch(ev.type){
-                        case Expose:
-                            //case ConfigureNotify:
-                            r = GRect(0,0,
-                                    ev.xexpose.x + ev.xexpose.width,
-                                    ev.xexpose.y+ev.xexpose.height);
-                            r.dump();
-                            if (r.height()  > 0 && r.width() > 0 && ev.xexpose.count == 0)
-                                a->setWindowRectInParent(r);
-                            //a->recalcRect();
-                            break;
-                        case DestroyNotify:
-                            msg("quit\n");
-                            return;
-                        case ClientMessage:
-                            XUnmapWindow(getDisplay(),getWindow());
-                            msg("quit\n");
-                            return;
-                    }
-                    a->processEvent(ev);
-                }
-                }
-                //break;
-            }
-        }
- 
+
         void showHighlightBar(const GRect& r,int highlighcolor, const GString& showStr){
             GRect rr = r;
             drawSolid(rr,highlighcolor);
@@ -686,6 +681,102 @@ class GWindow : public GWindowBase
                 a->draw();
             }
         }
+        GRect toLocalRect(const GRect& gr){
+            GPoint p= getAbsolutePosition();
+            GRect localr = gr;
+            localr.sub(p.x, p.y);
+            return localr;
+        }
+        virtual void updateRect(const GRect& r){
+            draw();
+        };
+        virtual bool invalidRect(const GRect& globalrect){
+            GRect localr = toLocalRect(globalrect);
+            if (isCrossRect(localr,globalrect)){
+                updateRect(localr);
+            }else{
+                return false;
+            }
+            for (auto a : m_pv_childs){
+                a->invalidRect(globalrect);
+            }
+            return true;
+        };
+};
+class GWindowRun : public GWindow<GWindowRun>
+{
+    private:
+        bool m_quit = false;
+    public:
+        void setQuit(bool f){
+            m_quit = f;
+        }
+        void run()
+        {
+            XMapWindow(getDisplay(),getWindow());
+            XEvent ev;
+            GRect r;
+            timeval tv;
+            fd_set fd;
+            int connectfd;
+            connectfd=ConnectionNumber(getDisplay());
+            g_base.centerWindow(-1);
+            Atom wmDelete = XInternAtom(getDisplay(),
+                    "WM_DELETE_WINDOW",true);
+            XSetWMProtocols(getDisplay(),getWindow(),&wmDelete,1);
+            while(1){
+                if (m_quit == true){
+                    XUnmapWindow(getDisplay(),getWindow());
+                    return;
+                }
+                FD_ZERO(&fd);
+                FD_SET(connectfd,&fd);
+                tv.tv_usec = 0;
+                tv.tv_sec = 1;
+                int num = select(connectfd + 1,
+                        &fd,NULL,NULL,&tv);
+                if (num >0){
+                    //msg("receive event \n");
+                }else if (num == 0){
+                    //msg("time fired \n");
+                }else {
+                    msg("quit \n");
+                    return;
+                }
+                while(XPending(getDisplay())) {
+                XNextEvent(getDisplay(),&ev);
+                for (auto a : getChilds()){
+                    switch(ev.type){
+                        case Expose:
+                            //case ConfigureNotify:
+                            r = GRect(0,0,
+                                    ev.xexpose.x + ev.xexpose.width,
+                                    ev.xexpose.y+ev.xexpose.height);
+                            if (r.height()  > 0 && r.width() > 0 && ev.xexpose.count == 0)
+                            {
+                                if (!a->isFixed())
+                                a->setWindowRectInParent(r);
+                            }
+                            //a->recalcRect();
+                            break;
+                        case DestroyNotify:
+                            msg("quit\n");
+                            return;
+                        case ClientMessage:
+                            XUnmapWindow(getDisplay(),getWindow());
+                            msg("quit\n");
+                            return;
+                    }
+                    GWindowBase * p = getFocused();
+                    if (p != NULL)
+                        p->processEvent(ev);
+                    else
+                        a->processEvent(ev);
+                }
+                }
+                //break;
+            }
+        }
 };
 
 class GScrollBar : public GWindow<GScrollBar> 
@@ -700,6 +791,9 @@ class GScrollBar : public GWindow<GScrollBar>
             return m_pos;
         }
         void draw(){
+#ifdef DEBUG_DRAW
+            msg("GScrollBar drawing \n");
+#endif
             if (!needDraw())
                 return;
             GRect r = getWindowRectInParent();
@@ -763,7 +857,14 @@ class GButton : public GWindow<GButton> , public GEvent
             centerWindow(p,d);
             setWindowRectInParent(d);
         }; 
-        virtual MSG     processEvent(const XEvent& e){
+        void processChilds(const XEvent& e){
+            for (auto a : getChilds()){
+                if (a->isVisible())
+                    a->processEvent(e);
+            }
+        }
+        virtual MSG  processEvent(const XEvent& e){
+            processChilds(e);
             if( isExposed(e)){
                 needDraw(true);
                 draw();
@@ -783,6 +884,9 @@ class GButton : public GWindow<GButton> , public GEvent
             return MSG_CONTINUE;
         };
         virtual void    draw() {
+#ifdef DEBUG_DRAW
+            msg("GButton drawing \n");
+#endif
             if (needDraw()){
                 GRect r = getWindowRectInParent();
                 r.move(0,0);
@@ -970,6 +1074,9 @@ class GEdit : public GWindow<GEdit>, public GEvent
 
         //maniulator
         void draw() {
+#ifdef DEBUG_DRAW
+            msg("GEdit drawing \n");
+#endif
             drawFocus();
             if (m_focus)
                 drawCursor();
@@ -1364,13 +1471,19 @@ class GListBox : public GWindow<GListBox>
         needDraw(true);
         draw();
     }
+    void drawFrame(){
+        GRect r = getClientRectInWindow();
+        GWindow::drawFrame(r,COLORBLACK,COLORBLACK);
+    }
     void draw(){
+#if DEBUG_DRAW 
+        msg("GListBox drawing \n");
+#endif
         if (!needDraw())
             return;
-        //drawFrame(m_top,COLORMID,COLORMID);
+        //drawFrame(m_top,COLORRED,COLORGREEN);
         GRect r = getClientRectInWindow();
         drawSolid(r,COLORWHITE); 
-        //drawFrame(r);
         GPoint p(r.x1,r.y1);
         if (m_strings.size() > 0) {
         firstRow();
@@ -1382,6 +1495,7 @@ class GListBox : public GWindow<GListBox>
         if (m_hb_draw)
             m_scrollBarHori.draw();
         }
+        drawFrame();
         needDraw(false);
     }
     void firstRow(){
@@ -1544,6 +1658,8 @@ class GListBox : public GWindow<GListBox>
             else
                 a = "";
             showHighlightBar(r, COLORBLUE,a);
+            //GWindow::drawFrame(r,COLORBLACK,COLORBLACK);
+            drawFrame();
         }
     }
     void showString(){
@@ -1614,6 +1730,9 @@ class GList  :public  GWindow<GList>
             fillRectangle(r.x2 -10, r.y1 + 5, r.x2 - 4, r.y2 - 5);
         }
         void draw(){
+#if DEBUG_DRAW 
+        msg("GList drawing \n");
+#endif
             if (!needDraw())
                 return ;
             GRect r = getClientRectInWindow();
@@ -1708,6 +1827,9 @@ class GStatus : public GWindow<GStatus>
     public:
         //maniulator
         void draw(){
+#ifdef DEBUG_DRAW
+            msg("GStatus drawing \n");
+#endif
             GRect r = getWindowRectInParent();
             r.move(0,0);
             GRect r1;
@@ -1743,9 +1865,12 @@ class GFrame : public GWindow<GFrame>, public GEvent
             m_showStatus = f;
         }
         void showFrame(bool f){
-            m_showStatus = f;
+            m_showFrame = f;
         }
         virtual void draw() {
+#ifdef DEBUG_DRAW
+            msg("GFrame drawing \n");
+#endif
             drawFrame();
             if(m_menu != NULL){
                 m_menu->draw();
@@ -1776,14 +1901,6 @@ class GFrame : public GWindow<GFrame>, public GEvent
         void addMenu(GMenu * m){
             m_menu = m;
             m->setParent(this);
-        }
-        void invalidRect(const GRect& r){
-            for(auto a : getChilds()){
-                GRect cr = a->getWindowRectInParent();
-                if (isCrossRect(r, cr)){
-                    a->draw();
-                }
-            }
         }
 
         void updateStatus(){
@@ -1822,10 +1939,7 @@ class GFrame : public GWindow<GFrame>, public GEvent
             if (m_showFrame == true)
                 GWindow::drawFrame(r);
         }
-        MSG processEvent(XEvent& ev){
-            return MSG_CONTINUE;
-        }
-        MSG innerprocessEvent(const XEvent& ev){
+        MSG processEvent(const XEvent& ev){
             /*
                if (m_menu != NULL){
                if (m_menu->processEvent(ev) == MSG_REDRAW){
@@ -1960,15 +2074,47 @@ class GFrameLayout : public GFrame
             m_layout = l;
             l->setFrame(this);
         }
-        //Expose is not first XEvent;
-        MSG processEvent(const XEvent& e){
+        virtual MSG localProcess(const XEvent& e){
             if (e.type == Expose ){
-                layout();
-                //draw(); 
-                innerdraw();
+                onExpose();
             }
-            return innerprocessEvent(e);
+            return MSG_CONTINUE;
         }
+        //Expose is not first XEvent;
+        void onExpose(){
+                layout();
+                draw(); 
+                innerdraw();
+        }
+        MSG processEvent(const XEvent& e){
+            if (localProcess(e) == MSG_REDRAW){
+                return MSG_REDRAW;
+            }
+            return GFrame::processEvent(e);
+        }
+};
+class GPanel : public GFrameLayout
+{
+    public:
+        virtual MSG localProcess(const XEvent& e){
+            if (isButtonDown(e)){
+                XEvent ev = xevevtToContainer(e);
+                if (isForMe(ev)){
+                }else{
+                    GRect r = getAbsoluteRect();
+                    GWindowBase* pf = getRootParent();
+                    pf->invalidRect(r);
+                    setVisible(false);
+                    clearFocus();
+                    return MSG_REDRAW;
+                }
+            }
+            return GFrameLayout::localProcess(e);
+        }
+
+};
+class GFloatPanel : public GPanel
+{
 };
 #endif
 

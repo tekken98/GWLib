@@ -4,9 +4,12 @@
 #include <memory>
 #include "GWindow.h"
 //#include <typeinfo>
-#define ID_LIST 1001
-const int ID_DIALOG = 2001;
-class dlg : public GWindow<dlg>
+const int ID_LIST       = 1001;
+const int ID_DIALOG     = 2001;
+const int ID_RUN        = 3001;
+const int ID_MB         = 4001;
+const int ID_PANEL      = 5001;
+class dlg : public GWindowRun
 {
     private:
     GFrameLayout*  manager = NULL;
@@ -66,15 +69,50 @@ class dlg : public GWindow<dlg>
     }
     void draw(){};
 };
-class MW : public GWindow<MW>
+class mypanel : public GPanel 
+{
+    GButton *btn;
+    GButton *btn1;
+    public:
+    mypanel(){
+        btn = new GButton("good");
+        btn1 = new GButton("bad");
+        add(btn);
+        add(btn1);
+    }
+    ~mypanel(){
+        delete btn;
+        delete btn1;
+    }
+};
+class MW : public GWindowRun
 {
     GList * m_list;
+    mypanel * m_panel;
     public:
     void draw(){
-        msg(m_list->getTitle());
+        GString s = m_list->getTitle() + "\n";
+        msg(s);
+    }
+
+    static void onBtn(const XEvent& ev){
+        MW *p = (MW*)GgetWindowMap(ID_RUN);
+        mypanel * mp = (mypanel*)GgetWindowMap(ID_PANEL);
+            mp->setWindowRectInParent(0,0,200,100);
+            GRect r = mp->getParent()->getWindowRectInParent();
+            int x = (r.width() - mp->getWindowRectInParent().width()) / 2;
+            mp->move(x,r.height());
+            mp->recalcRect();
+            mp->layout();
+            mp->setVisible(true);
+            mp->needDraw(true);
+            mp->draw();
+            mp->setFocus();
     }
     MW(){
         //setWindowRectInParent(0,0,400,400);
+        m_panel = new mypanel();
+        m_panel->addMap(ID_PANEL);
         GFrameLayout manager("Manager");
         GFrameLayout up("up frame"), 
                      mid("mid frame"), 
@@ -134,8 +172,12 @@ class MW : public GWindow<MW>
 
        GButton mb("okman");
        mb.setFont();
-
-        right.add(&mb);
+       mb.addEventHandler(onBtn);
+       mb.addMap(ID_MB);
+       mb.add(m_panel);
+            m_panel->setFixed(true);
+            m_panel->showFrame(true);
+        up.add(&mb);
         manager.addLayout(new GLayoutVertical());
         up.addLayout(new GLayoutVertical());
         mid.addLayout(new GLayoutHori());
@@ -153,12 +195,19 @@ class MW : public GWindow<MW>
         addFrame(&manager);
         manager.setBorderWidth(0);
         setWindowName("fun");
+        if (getParent() == NULL)
+            msg("null");
+        addMap(ID_RUN);
+        manager.showStatus(true);
         run();
+    }
+    ~MW(){
+        delete m_panel;
     }
 };
 int main () {
-  //  dlg d;
-  //  d.show();
+    //dlg d;
+    //d.show();
     MW w;
     return 0;
 }
