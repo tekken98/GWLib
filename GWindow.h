@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cassert>
 #include "GString.h"
+#define DEBUG_DRAW 0
 using std::string;
 using std::cout;
 using std::endl;
@@ -268,6 +269,7 @@ class GWindowBase
 {
     private:
         GWindowBase * m_parent;
+        std::vector<GWindowBase*> m_pv_childs;
         GString m_title;
         GC m_gc;
         GRect m_window_rect;
@@ -320,6 +322,36 @@ class GWindowBase
             if ( r1.y2  <= r2.y1 ) return false;
             return true;
         }
+        bool isForMe(const XEvent& ev){
+            return getWindowRectInParent().ptInRect(ev.xbutton.x,ev.xbutton.y);
+        }
+        bool isForChilds(const XEvent& ev){
+            for (auto a : m_pv_childs){
+                XEvent aev = ev;
+                GRect r = getWindowRectInParent();
+                aev.xbutton.x -= r.x1;
+                aev.xbutton.y -= r.y1;
+                if (a->isForMe(aev) && a->isVisible()) {
+                    a->dumpName();
+                    return true;
+                }
+                if (a->isForChilds(aev)){
+                    a->dump();
+                    return true;
+                }
+            }
+            return false;
+        }
+         bool findChild(GWindowBase * child){
+            //std::vector<GWindowBase*>::iterator it; 
+            auto it = find(m_pv_childs.begin(),m_pv_childs.end(),child);
+            return (it != m_pv_childs.end());
+        }
+         void add(GWindowBase * w ){
+            m_pv_childs.push_back(w);
+            w->setParent(this);
+        }
+        std::vector<GWindowBase*> getChilds() { return m_pv_childs;};
 
         void setReservedRect(const GRect& r ){
             m_reservedrect = r;
@@ -407,11 +439,18 @@ class GWindowBase
         };
         GRect& getTitleRect() { return m_title_rect;}
         GString& getTitle(){return m_title;};
- 
-
+        void dumpParent(){
+                cout << "****** Begin dump \n";
+                dump();
+                cout << "****** End dump \n";
+        }
+        void dumpName(){
+            cout << getTitle() << endl;
+        }
         void dump(){
-            if (m_parent == NULL)
+            if (m_parent == NULL){
                 return ;
+            }
             else 
                 m_parent->dump();
             cout << "m_title:" << m_title << endl;
@@ -457,12 +496,11 @@ template <typename T>
 class GWindow : public GWindowBase
 {
     private:
-        std::vector<GWindowBase*> m_pv_childs;
         bool m_focused = false;
         GFont m_font;
     public:
         //constructor
-        GWindow():m_pv_childs(){};
+        GWindow(){};
         GWindow(const string& s):GWindowBase(s){
         }
         GWindow(const GWindow& s){};
@@ -476,12 +514,7 @@ class GWindow : public GWindowBase
                 p = p->getParent();
             return (GWindow*)p;
         }
-        bool findChild(GWindowBase * child){
-            //std::vector<GWindowBase*>::iterator it; 
-            auto it = find(m_pv_childs.begin(),m_pv_childs.end(),child);
-            return (it != m_pv_childs.end());
-        }
-        void centerWindow(const GRect& parentRect, GRect& thisRect){
+       void centerWindow(const GRect& parentRect, GRect& thisRect){
             int cx = (parentRect.width() - thisRect.width()) / 2;
             int cy = (parentRect.height() - thisRect.height()) / 2;
             thisRect.move(parentRect.x1 + cx, parentRect.y1 + cy);
@@ -567,13 +600,6 @@ class GWindow : public GWindowBase
             GRect r = GRect(x1,y1,x2,y2);
             fillRectangle(r);
         }
-        void add(GWindowBase * w ){
-            m_pv_childs.push_back(w);
-            w->setParent(this);
-        }
-
-        std::vector<GWindowBase*> getChilds() { return m_pv_childs;};
-
         void showHighlightBar(const GRect& r,int highlighcolor, const GString& showStr){
             GRect rr = r;
             drawSolid(rr,highlighcolor);
@@ -621,10 +647,7 @@ class GWindow : public GWindowBase
  
         //accessor
         // at containner xy
-        bool isForMe(const XEvent& ev){
-            return getWindowRectInParent().ptInRect(ev.xbutton.x,ev.xbutton.y);
-        }
-        bool isButtonDown(const XEvent& ev){
+       bool isButtonDown(const XEvent& ev){
             return ev.type == ButtonPress;
         }
         bool isButtonRelease(const XEvent& ev){
@@ -676,7 +699,7 @@ class GWindow : public GWindowBase
             drawLine(r.x2-1,r.y1+2,r.x2-1,r.y2-2);
         }
         void drawAllWindow(){
-            for (auto a : m_pv_childs){
+            for (auto a : getChilds()){
                 a->needDraw(true);
                 a->draw();
             }
@@ -692,90 +715,62 @@ class GWindow : public GWindowBase
         };
         virtual bool invalidRect(const GRect& globalrect){
             GRect localr = toLocalRect(globalrect);
-            if (isCrossRect(localr,globalrect)){
+            GRect r = getWindowRectInParent();
+            if (isCrossRect(r,localr)){
                 updateRect(localr);
             }else{
                 return false;
             }
-            for (auto a : m_pv_childs){
+            for (auto a :getChilds()){
                 a->invalidRect(globalrect);
             }
             return true;
         };
 };
-class GWindowRun : public GWindow<GWindowRun>
+template <typename T>
+class GPop 
 {
     private:
-        bool m_quit = false;
+        XImage * mp_image;
+        GRect mr_bg;
     public:
-        void setQuit(bool f){
-            m_quit = f;
+        GPop():mp_image(NULL){};
+        XImage* getImage(const GRect& r){
+            if (mp_image != NULL)
+                delete mp_image;
+            mp_image = XGetImage(g_base.getDisplay(),g_base.getWindow(),
+                    r.x1,r.y1,r.width(),r.height(),
+                    AllPlanes,
+                    ZPixmap);
+            return mp_image;
         }
-        void run()
-        {
-            XMapWindow(getDisplay(),getWindow());
-            XEvent ev;
-            GRect r;
-            timeval tv;
-            fd_set fd;
-            int connectfd;
-            connectfd=ConnectionNumber(getDisplay());
-            g_base.centerWindow(-1);
-            Atom wmDelete = XInternAtom(getDisplay(),
-                    "WM_DELETE_WINDOW",true);
-            XSetWMProtocols(getDisplay(),getWindow(),&wmDelete,1);
-            while(1){
-                if (m_quit == true){
-                    XUnmapWindow(getDisplay(),getWindow());
-                    return;
-                }
-                FD_ZERO(&fd);
-                FD_SET(connectfd,&fd);
-                tv.tv_usec = 0;
-                tv.tv_sec = 1;
-                int num = select(connectfd + 1,
-                        &fd,NULL,NULL,&tv);
-                if (num >0){
-                    //msg("receive event \n");
-                }else if (num == 0){
-                    //msg("time fired \n");
-                }else {
-                    msg("quit \n");
-                    return;
-                }
-                while(XPending(getDisplay())) {
-                XNextEvent(getDisplay(),&ev);
-                for (auto a : getChilds()){
-                    switch(ev.type){
-                        case Expose:
-                            //case ConfigureNotify:
-                            r = GRect(0,0,
-                                    ev.xexpose.x + ev.xexpose.width,
-                                    ev.xexpose.y+ev.xexpose.height);
-                            if (r.height()  > 0 && r.width() > 0 && ev.xexpose.count == 0)
-                            {
-                                if (!a->isFixed())
-                                a->setWindowRectInParent(r);
-                            }
-                            //a->recalcRect();
-                            break;
-                        case DestroyNotify:
-                            msg("quit\n");
-                            return;
-                        case ClientMessage:
-                            XUnmapWindow(getDisplay(),getWindow());
-                            msg("quit\n");
-                            return;
-                    }
-                    GWindowBase * p = getFocused();
-                    if (p != NULL)
-                        p->processEvent(ev);
-                    else
-                        a->processEvent(ev);
-                }
-                }
-                //break;
-            }
+        void dumpImage(){
+           if (mp_image != NULL){
+               cout << "width:" << mp_image->width
+                    << "height:" << mp_image->height
+                    << endl;
+           }
+        }
+        void putImage(const GRect& source, const GRect& dest, const GC& gc){
+            XPutImage(g_base.getDisplay(),g_base.getWindow(),gc,
+                    mp_image,source.x1,source.y1,
+                    dest.x1,dest.y1,source.width(),source.height());
+        }
+        void saveBackground(T* obj){
+            mr_bg = obj->getAbsoluteRect();
+            getImage(mr_bg);
+        }
+        void restoreBackground(T* obj){
+            GRect r = mr_bg;
+            r.move(0,0);
+            //GRect d(0,0,r.width(),r.height());
+            putImage(r,mr_bg,obj->getGC());
+            //putImage(r,d,obj->getGC());
+        }
+
+        ~GPop(){
+            if (mp_image != NULL)
+                delete mp_image;
         }
 };
 
@@ -911,11 +906,11 @@ class GButton : public GWindow<GButton> , public GEvent
         void onButtonDown(const XEvent& ev){
             drawDown();
             m_down = true;
-            doEvent(ev);
         }
         void onButtonUp(const XEvent& ev){
             m_down = false;
             drawUp();
+            doEvent(ev);
         }
 };
 class GScrollBarV : public GScrollBar
@@ -1080,6 +1075,7 @@ class GEdit : public GWindow<GEdit>, public GEvent
             drawFocus();
             if (m_focus)
                 drawCursor();
+            needDraw(false);
         }
         //accessor
 };
@@ -1390,10 +1386,10 @@ class GMenu : public GWindow<GMenu>
             m_item.push_back(item);
         }
 };
-
-class GListBox : public GWindow<GListBox>
+class GListBox : public GWindow<GListBox> , public GPop<GListBox>
 {
     GRect m_top;
+    GRect mr_bg;
     int m_top_height = 2;
     int m_item_count = 1;
     int m_item_length = 1;
@@ -1409,15 +1405,23 @@ class GListBox : public GWindow<GListBox>
     bool m_autoScroll=false;
     bool m_vb_draw = true;
     bool m_hb_draw = false;
+    bool m_pop = false;
     GScrollBarV m_scrollBarVert;
     GScrollBarH m_scrollBarHori;
     public:
     GListBox(){
+        init();
+    };
+    GListBox(const GString& s){
+        init();
+        setTitle(s);
+    }
+    void init(){
         m_scrollBarVert.setParent(this);
         m_scrollBarHori.setParent(this);
         m_string_height = getFontStringRect("A").height();
         m_string_width = getFontStringRect("a").width();
-    };
+    }
     int getDefaultStringHeight(){
         int h = m_strings.size() > m_maxline ? m_maxline : m_strings.size(); 
         return h * getFontStringHeight();
@@ -1448,6 +1452,9 @@ class GListBox : public GWindow<GListBox>
     void setAutoScroll(bool b){
         m_autoScroll = b;
     }
+    void setPop(bool b){
+        m_pop  = b;
+    }
     bool isAutoScroll(){
         return m_autoScroll;
     }
@@ -1468,6 +1475,8 @@ class GListBox : public GWindow<GListBox>
     }
     void update(){
         recalcRect();
+        GRect r = getClientRectInWindow();
+        drawSolid(r,COLORWHITE);
         needDraw(true);
         draw();
     }
@@ -1483,8 +1492,10 @@ class GListBox : public GWindow<GListBox>
             return;
         //drawFrame(m_top,COLORRED,COLORGREEN);
         GRect r = getClientRectInWindow();
-        drawSolid(r,COLORWHITE); 
         GPoint p(r.x1,r.y1);
+        if (m_pop){
+            saveBackground(this);
+        }
         if (m_strings.size() > 0) {
         firstRow();
         firstCol();
@@ -1500,7 +1511,8 @@ class GListBox : public GWindow<GListBox>
     }
     void firstRow(){
         GRect r = m_scrollBarVert.getWindowRectInParent();
-        GRect c = getClientRectInParent();
+        //GRect c = getClientRectInParent();
+        GRect c = getClientRectInWindow();
         m_firstrow = (r.y1  * m_strings.size()) / c.height();
     }
     void firstCol(){
@@ -1525,6 +1537,8 @@ class GListBox : public GWindow<GListBox>
                 r.x2 - border,r.y2 -border);
         int height = m_maxline * m_string_height;
         rr.y2 = rr.y1 + height;
+        //if (rr.height() > r.height())
+        setWindowRectInParent(r.x1,r.y1,rr.x2 + border, rr.y2 + border);
         setclientRectInparent(rr);
 
         r = getClientRectInWindow();
@@ -1593,8 +1607,19 @@ class GListBox : public GWindow<GListBox>
     }
     
     MSG onButtonDown(const XEvent& ev){
+        if (m_pop){
+            restoreBackground(this);
+        }
         if (isForMe(ev)){
-            showSelect(ev);
+            if (! m_pop)
+                showSelect(ev);
+            else{
+                GWindowBase* p = getParent();
+                p->needDraw(true);
+                p->setTitle(getSelected());
+                p->draw();
+                setVisible(false);
+            }
             return MSG_SELECTED;
         }
         else{
@@ -1697,8 +1722,9 @@ class GList  :public  GWindow<GList>
         //maniulator
         void init(){
             setWindowRectInParent(0,0,400,20);
-            m_listbox = new GListBox();
-            m_listbox->setParent(this);
+            m_listbox = new GListBox("listbox");
+            m_listbox->setPop(true);
+            add(m_listbox);
         }
         void addList(const GString& s){
             m_listbox->addList(s);
@@ -1743,16 +1769,18 @@ class GList  :public  GWindow<GList>
             needDraw(false);
         }
         MSG onExpose(){
+            layout();
+            needDraw(true);
+            draw();
+            return MSG_CONTINUE;
+        }
+        virtual void layout(){
                 m_btn_down = false;
                 oldrow= -1;
                 GRect r = getWindowRectInParent();
                 int h = m_listbox->getDefaultStringHeight();
                 m_listbox->setWindowRectInParent(0,r.height(),r.width(),r.height()+h);
                 m_listbox->recalcRect();
-                needDraw(true);
-                draw();
-                //return MSG_REDRAW;
-                return MSG_CONTINUE;
          
         }
         void onButtonDown(){
@@ -1795,6 +1823,7 @@ class GList  :public  GWindow<GList>
             XEvent ev = xevevtToContainer(e);
             if (isForMe(ev) && isButtonDown(ev)){
                 m_btn_down = true;
+                m_listbox->setVisible(true);
                 m_listbox->show(true);
                 return MSG_NODRAW;
             }
@@ -1869,13 +1898,17 @@ class GFrame : public GWindow<GFrame>, public GEvent
         }
         virtual void draw() {
 #ifdef DEBUG_DRAW
-            msg("GFrame drawing \n");
+            GString a;
+            a = getTitle();
+            a += "GFrame drawing\n";
+            msg(a);
 #endif
             drawFrame();
             if(m_menu != NULL){
                 m_menu->draw();
             }
             drawAllWindow();
+            needDraw(false);
         }
         void recalcRect(){
             GRect r = getWindowRectInParent();
@@ -1949,6 +1982,7 @@ class GFrame : public GWindow<GFrame>, public GEvent
                }
                */
             XEvent e = ev;
+            /*
                    if (m_targetWin !=NULL){
                 switch (m_targetWin -> processEvent(e)){
                     case MSG_NODRAW:
@@ -1960,9 +1994,11 @@ class GFrame : public GWindow<GFrame>, public GEvent
                         break;
                 }
             }
+            */
 
            for (auto a : getChilds()){
                 switch(a->processEvent(e)){
+                    /*
                     case MSG_REDRAW:
                         draw();
                         m_targetWin = a;
@@ -1973,6 +2009,7 @@ class GFrame : public GWindow<GFrame>, public GEvent
                     case MSG_CONTINUE:
                         continue;
                         break;
+                */
                 }
                 m_targetWin = NULL;
             }
@@ -2084,7 +2121,7 @@ class GFrameLayout : public GFrame
         void onExpose(){
                 layout();
                 draw(); 
-                innerdraw();
+                //innerdraw();
         }
         MSG processEvent(const XEvent& e){
             if (localProcess(e) == MSG_REDRAW){
@@ -2093,25 +2130,119 @@ class GFrameLayout : public GFrame
             return GFrame::processEvent(e);
         }
 };
-class GPanel : public GFrameLayout
+class GWindowRun
 {
+
+    private:
+        GWindowBase * mp_win = NULL;
+        bool m_quit = false;
     public:
+        void setQuit(bool f){
+            m_quit = f;
+        }
+        void addFrame(GFrameLayout* b){
+            mp_win = b;
+        }
+        void run()
+        {
+            if (mp_win == NULL)
+                return;
+            Display * dpy = mp_win->getDisplay();
+            Window win = mp_win->getWindow();
+            XMapWindow(dpy,win);
+            XEvent ev;
+            GRect r;
+            timeval tv;
+            fd_set fd;
+            int connectfd;
+            connectfd=ConnectionNumber(dpy);
+            g_base.centerWindow(-1);
+            Atom wmDelete = XInternAtom(dpy,
+                    "WM_DELETE_WINDOW",true);
+            XSetWMProtocols(dpy,win,&wmDelete,1);
+            while(1){
+                if (m_quit == true){
+                    XUnmapWindow(dpy,win);
+                    return;
+                }
+                FD_ZERO(&fd);
+                FD_SET(connectfd,&fd);
+                tv.tv_usec = 0;
+                tv.tv_sec = 1;
+                int num = select(connectfd + 1,
+                        &fd,NULL,NULL,&tv);
+                if (num >0){
+                    //msg("receive event \n");
+                }else if (num == 0){
+                    //msg("time fired \n");
+                }else {
+                    msg("quit \n");
+                    return;
+                }
+                while(XPending(dpy)) {
+                XNextEvent(dpy,&ev);
+                GWindowBase * a = mp_win;
+                    switch(ev.type){
+                        case Expose:
+                            //case ConfigureNotify:
+                            r = GRect(0,0,
+                                    ev.xexpose.x + ev.xexpose.width,
+                                    ev.xexpose.y+ev.xexpose.height);
+                            if (r.height()  > 0 && r.width() > 0 && ev.xexpose.count == 0)
+                            {
+                                if (!a->isFixed())
+                                    a->setWindowRectInParent(r);
+                            }
+                            a->recalcRect();
+                            a->layout();
+                            a->draw();
+                            continue;
+                        case DestroyNotify:
+                            msg("quit\n");
+                            return;
+                        case ClientMessage:
+                            XUnmapWindow(dpy,win);
+                            msg("quit\n");
+                            return;
+                    }
+                    GWindowBase * p = mp_win->getFocused();
+                    if (p != NULL)
+                        p->processEvent(ev);
+                    else
+                        a->processEvent(ev);
+                }
+                //break;
+            }
+        }
+};
+
+class GPanel : public GFrameLayout ,  public GPop<GPanel>
+{
+    private:
+    public:
+        void draw(){
+            saveBackground(this);
+            GFrameLayout::draw();
+        }
         virtual MSG localProcess(const XEvent& e){
             if (isButtonDown(e)){
                 XEvent ev = xevevtToContainer(e);
-                if (isForMe(ev)){
+                if (isForMe(ev) || isForChilds(ev)){
+                    return GFrameLayout::localProcess(e);
                 }else{
-                    GRect r = getAbsoluteRect();
-                    GWindowBase* pf = getRootParent();
-                    pf->invalidRect(r);
-                    setVisible(false);
+                    restoreBackground(this);
                     clearFocus();
+                    setVisible(false);
                     return MSG_REDRAW;
                 }
             }
             return GFrameLayout::localProcess(e);
         }
-
+        void clearRect(const GRect& r){
+            GPoint p = getAbsolutePosition();
+            XClearArea(g_base.getDisplay(),g_base.getWindow(),p.x,p.y,
+                    r.width(),r.height(),false);
+        }
 };
 class GFloatPanel : public GPanel
 {

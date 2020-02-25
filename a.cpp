@@ -9,76 +9,23 @@ const int ID_DIALOG     = 2001;
 const int ID_RUN        = 3001;
 const int ID_MB         = 4001;
 const int ID_PANEL      = 5001;
-class dlg : public GWindowRun
-{
-    private:
-    GFrameLayout*  manager = NULL;
-    GFrameLayout* up = NULL;
-    GFrameLayout* down = NULL;
-    GButton * ok = NULL;
-    GButton * cancel = NULL;
-    GLabel* info=NULL ;
- 
-        static void onOk(const XEvent& ev){
-            cout << "ok" << endl;
-            dlg * d = (dlg*)GgetWindowMap(ID_DIALOG);
-            d->quit();
-        }
-        static void onCancel(const XEvent& ev){
-            cout << "cancel" << endl;
-            dlg* d = (dlg*)GgetWindowMap(ID_DIALOG);
-            d->quit();
-        }
-        void quit(){
-            setQuit(true);
-        }
-   public:
-    dlg(){
-        manager = new GFrameLayout("dlg");
-        up = new GFrameLayout("up");
-        info  = new GLabel("good man");
-        up->add(info);
-
-        down = new GFrameLayout("down");
-        ok = new GButton("ok");
-        ok->addEventHandler(onOk);
-        cancel = new GButton("cancel");
-        cancel->addEventHandler(onCancel);
-        down->add(ok);
-        down->add(cancel);
-        down->addLayout(new GLayoutHori());
-
-        manager->addFrame(up);
-        manager->addFrame(down);
-        addFrame(manager);
-
-        setWindowName("Dlg");
-        setWindowRectInParent(0,0,200,200);
-        addMap(ID_DIALOG); 
-    }
-    void show(){
-        run();
-    }
-    ~dlg(){
-        delete info;
-        delete ok;
-        delete cancel;
-        delete up;
-        delete down;
-        delete manager;
-    }
-    void draw(){};
-};
 class mypanel : public GPanel 
 {
     GButton *btn;
     GButton *btn1;
+    GList *list;
     public:
     mypanel(){
         btn = new GButton("good");
         btn1 = new GButton("bad");
+        list = new GList("list");
+        list->addList("good");
+        list->addList("bad");
+        list->addList("bad one");
         add(btn);
         add(btn1);
+        add(list);
+        setTitle("MyPanel");
     }
     ~mypanel(){
         delete btn;
@@ -91,14 +38,14 @@ class MW : public GWindowRun
     mypanel * m_panel;
     public:
     void draw(){
-        GString s = m_list->getTitle() + "\n";
-        msg(s);
+        //GString s = m_list->getTitle() + "\n";
+        //msg(s);
     }
 
     static void onBtn(const XEvent& ev){
         MW *p = (MW*)GgetWindowMap(ID_RUN);
         mypanel * mp = (mypanel*)GgetWindowMap(ID_PANEL);
-            mp->setWindowRectInParent(0,0,200,100);
+            mp->setWindowRectInParent(0,0,200,200);
             GRect r = mp->getParent()->getWindowRectInParent();
             int x = (r.width() - mp->getWindowRectInParent().width()) / 2;
             mp->move(x,r.height());
@@ -152,7 +99,7 @@ class MW : public GWindowRun
         GLabel btn("button");
         char ** fonts;
         int font_count;
-        fonts = XListFonts(getDisplay(),"*gb*",10000,&font_count);
+        fonts = XListFonts(g_base.getDisplay(),"*gb*",10000,&font_count);
         for (int i = 0; i< font_count; i++)
         {
             lb.addList(fonts[i]);
@@ -194,10 +141,6 @@ class MW : public GWindowRun
         manager.add(&low);
         addFrame(&manager);
         manager.setBorderWidth(0);
-        setWindowName("fun");
-        if (getParent() == NULL)
-            msg("null");
-        addMap(ID_RUN);
         manager.showStatus(true);
         run();
     }
@@ -206,8 +149,6 @@ class MW : public GWindowRun
     }
 };
 int main () {
-    //dlg d;
-    //d.show();
     MW w;
     return 0;
 }

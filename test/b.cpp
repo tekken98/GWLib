@@ -1,9 +1,8 @@
 #include "../GWindow.h"
-class GM : public GWindow<GM>
+class GM : public GWindowRun
 {
     public:
     GM(const GString& s){
-        setTitle(s);
     }
     void draw(){};
 };
@@ -56,8 +55,10 @@ GString makeMultiply(){
 void fplusimpl();
 void fminusimpl();
 void fmultiplyimpl();
+#define MAP(a,type,id) type a = (type)GgetWindowMap(id)
 void fplus(const XEvent& ev){
-    GListBox * p = (GListBox*) GgetWindowMap(ID_OUTLIST);
+    //GListBox * p = (GListBox*) GgetWindowMap(ID_OUTLIST);
+    MAP(p,GListBox*,ID_OUTLIST);
     p->clear();
     fplusimpl();
 };
@@ -137,8 +138,7 @@ int main(){
 
     //manager.add(&down);
     //root.add(&manager);
-    root.add(&down);
-    root.setWindowName("Homework");
+    root.addFrame(&down);
 
     srandom(time(NULL));
 
