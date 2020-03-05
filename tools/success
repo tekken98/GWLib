@@ -1,0 +1,10 @@
+#!/bin/sh
+trap INT
+while true;do
+    $*
+    if [ $? != 0 ]; then
+        continue
+    else
+        break
+    fi
+done
