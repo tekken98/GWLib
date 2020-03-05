@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cassert>
 #include "GString.h"
-#define DEBUG_DRAW 0
+//#define DEBUG_DRAW 
 using std::string;
 using std::cout;
 using std::endl;
