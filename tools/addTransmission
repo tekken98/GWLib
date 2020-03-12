@@ -1,11 +1,15 @@
 #!/bin/sh
-tmpfile="a.tmp"
+tmpfile="magnet.txt"
 cd ~/Downloads
-ls *.torrent | sort > $tmpfile
+#ls *.torrent | sort > $tmpfile
 vim $tmpfile
 for a in `cat $tmpfile`;do 
     if transmission-remote -a "$a" ;then
-        rm "$a"
+        #rm "$a"
+        echo "success"
+    else
+        echo "$a" >>failed.txt
+        echo "failed"
     fi
 done
 rm $tmpfile
