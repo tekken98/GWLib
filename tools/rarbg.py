@@ -19,11 +19,10 @@ def readCookie():
     print s
     header['cookie']=s
     
-def setSearchString(s,page):
+def setSearchString(s ,page,category):
     s = s.replace(" ","%20")
-    url = host + '/torrents.php?category=4&search='+s+'&order=seeders&by=DESC'
-    url = host + '/torrents.php?search='+s+'&order=seeders&by=DESC&page='+str(page)
-    #url = host + '/torrents.php?category=2;4&search='+s+'&order=seeders&by=DESC'
+    url = host + '/torrents.php?category='+category + '&search='+s+'&order=seeders&by=DESC&page='+str(page)
+    #url = host + '/torrents.php?search='+s+'&order=seeders&by=DESC&page='+str(page)
     print url
     return url
 def getZipHtml(url,header):
@@ -146,9 +145,9 @@ def downloadAllTorrent(links):
             print "got"
             downloadTorrent(torrentPage)
 
-def run(searchStr, pa):
+def run(searchStr, pa,category):
     #url2 = 'https://rarbgaccess.org/torrents.php?category=2;4&search='+ searchStr+'&order=seeders&by=DESC'
-    url = setSearchString(searchStr,pa)
+    url = setSearchString(searchStr,pa,category)
     readCookie()
     
     content = getZipHtml(url,header)
@@ -176,26 +175,44 @@ def help():
     print '   rarbg.py -t 30 -p 1 "search string"'
     print """
              -t --timeout  connect timeout
+             -c --category category
              -p --page     pagenumber
              -h --help     this
              """
+def helpcategory():
+    print "Category is :"
+    for k in category_dict.keys():
+        print "\t" + k
+
+def getcategory(s):
+    global category_dict
+    for (key,value) in category_dict.items():
+        if s == key :
+            return value
+    return ""
 
 def getoptions():
     global timeout
     global pagenum
     global searchstr
-    opts,args=getopt.getopt(sys.argv[1:],"ht:p:",["help","timeout=","page="])
-    if len(args) == 0:
-        help()
-        sys.exit()
+    global category
+    opts,args=getopt.getopt(sys.argv[1:],"hc:t:p:",["help","category=","timeout=","page="])
     for o,a in opts:
         if o in ("-t","--timeout"):
             timeout = int(a)
+        if o in ("-c","--category"):
+            if a == "help":
+                helpcategory()
+                sys.exit()
+            category = getcategory(a)
         if o in ("-p","--page"):
             pagenum = int(a)
         if o in ("-h","--help"):
             help()
             sys.exit()
+    if len(args) == 0:
+        help()
+        sys.exit()
     searchstr = args
 
 # program begin     
@@ -206,6 +223,17 @@ host = 'http://rarbgaccess.org'
 searchstr=""
 timeout=30
 pagenum=1
+category="4"
+category_dict = {
+        "Movie":"movies",
+        "XXX":"2;4",
+        "TV Shows":"2;18;41;49",
+        "Games":"2;27;28;29;30;31;32;40;54",
+        "Music":"2;23;24;25;26",
+        "Software":"2;33;34;43",
+        "None XXX":"2;14;15;16;17;21;22;42;18;19;41;27;28;29;30;31;32;40;23;24;25;26;33;34;43;44;45;46;47;48;49;50;51;52",
+        }
+
 header={
         'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
         'accept-encoding': 'gzip',
@@ -218,6 +246,6 @@ header={
         'user-agent': 'Mozilla/5.0 (X11; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36',
         }
 getoptions()
-#print searchstr, timeout , pagenum
-run(searchstr[0],pagenum) 
+print searchstr, timeout , pagenum,category
+run(searchstr[0],pagenum,category) 
 #readCookie()
